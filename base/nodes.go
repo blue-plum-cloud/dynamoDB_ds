@@ -1,6 +1,20 @@
 package base
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
+
+func (n *Node) Start(wg *sync.WaitGroup) {
+	defer wg.Done()
+	for {
+		select {
+		case <-n.close_ch:
+			fmt.Println("[", n.id, "]", "node is closing")
+			return
+		}
+	}
+}
 
 func CreateNodes(close_ch chan struct{}, numNodes int) []*Node {
 	fmt.Println("Constructing machines...")
@@ -10,6 +24,7 @@ func CreateNodes(close_ch chan struct{}, numNodes int) []*Node {
 
 		//make j nodes
 		node := Node{
+			id:       j,
 			v_clk:    make([]int, numNodes),
 			rcv_ch:   make(chan Message, numNodes),
 			close_ch: close_ch}
