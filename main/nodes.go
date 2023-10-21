@@ -1,8 +1,8 @@
-package main
+package base
 
 import "fmt"
 
-func createNodes(close_ch chan struct{}) []*Node {
+func CreateNodes(close_ch chan struct{}, numNodes int) []*Node {
 	fmt.Println("Constructing machines...")
 
 	var nodeGroup []*Node
@@ -12,13 +12,12 @@ func createNodes(close_ch chan struct{}) []*Node {
 		node := Node{
 			v_clk:    make([]int, numNodes),
 			rcv_ch:   make(chan Message, numNodes),
-			close_ch: close_ch,
-			tokens:   make([]*Token, numTokens)}
+			close_ch: close_ch}
 
 		nodeGroup = append(nodeGroup, &node)
 	}
 
-	//assign send channels usig other node's rcv channnels to current node
+	//assign send channels usig other node's rcv channels to current node
 	for j := 0; j < numNodes; j++ {
 		//get pointer of node
 		target_machine := nodeGroup[j]
@@ -28,7 +27,6 @@ func createNodes(close_ch chan struct{}) []*Node {
 			(*target_machine).channels = append((*target_machine).channels, receive_channel)
 		}
 	}
-	fmt.Println("done constructing...")
 	return nodeGroup
 
 }
@@ -44,7 +42,6 @@ func (n *Node) put(hash string, value *Object, context *Context) {
 	context.v_clk = n.copy_vclk()
 	(*value).context = context
 	n.data[hash] = value
-
 }
 
 // remember to return object

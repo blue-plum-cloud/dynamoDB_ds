@@ -1,4 +1,4 @@
-package main
+package base
 
 import (
 	"bufio"
@@ -14,6 +14,11 @@ const (
 
 func main() {
 	fmt.Println("Starting the application...")
+	close_ch := make(chan struct{})
+
+	phy_nodes := CreateNodes(close_ch, numNodes)
+	InitializeTokens(phy_nodes, numTokens)
+
 	reader := bufio.NewReader(os.Stdin)
 
 	for {

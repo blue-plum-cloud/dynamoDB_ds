@@ -1,4 +1,4 @@
-package main
+package base
 
 type Message struct {
 	//to properly define message
@@ -24,9 +24,21 @@ type Node struct {
 	close_ch chan struct{}      //to close go channels properly
 }
 
+func (n *Node) GetTokens() []*Token {
+	return n.tokens
+}
+
 type Token struct {
 	id          int
 	phy_node    *Node
 	range_start string
 	range_end   string
+}
+
+func (t *Token) GetStartRange() string {
+	return t.range_start
+}
+
+func (t *Token) GetEndRange() string {
+	return t.range_end
 }
