@@ -7,6 +7,11 @@ import (
 	"strings"
 )
 
+const (
+	numNodes  = 5
+	numTokens = 5
+)
+
 func main() {
 	fmt.Println("Starting the application...")
 	reader := bufio.NewReader(os.Stdin)
@@ -18,7 +23,7 @@ func main() {
 
 		if strings.HasPrefix(input, "get(") && strings.HasSuffix(input, ")") {
 			key := strings.TrimSuffix(strings.TrimPrefix(input, "get("), ")")
-			fmt.Println("Key is: ", key)
+			fmt.Println("Key is: ", key, " hashed to:", computeMD5(key))
 
 		} else if strings.HasPrefix(input, "put(") && strings.HasSuffix(input, ")") {
 			remainder := strings.TrimSuffix(strings.TrimPrefix(input, "put("), ")")
@@ -29,7 +34,7 @@ func main() {
 			}
 			key := strings.TrimSpace(parts[0])
 			value := strings.TrimSpace(parts[1])
-			fmt.Println("Value stored: ", value, " with key: ", key)
+			fmt.Println("Value stored: ", value, " with key: ", key, " hashed to:", computeMD5(key))
 
 		} else if input == "exit" {
 			break
