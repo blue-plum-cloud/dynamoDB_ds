@@ -4,4 +4,4 @@ Simple Implementation of dynamoDB for 50.041 Distributed Systems and Computing
 
 ## How to run
 
-To run code from the dynamodb_ds directory, execute `go run ./main`
+To run code from the dynamodb_ds directory, execute `go run main` and `go test ./tests` to run unit tests.
