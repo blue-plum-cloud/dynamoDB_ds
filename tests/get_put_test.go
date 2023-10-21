@@ -78,8 +78,8 @@ func TestGetNoData(t *testing.T) {
 
 	actual := node.Get(key)
 
-	if actual != nil {
-		t.Errorf("Expected 'nil', but got an object")
+	if actual.GetData() != "" {
+		t.Errorf("Expected 'nothing', but got an something")
 	}
 
 	close(close_ch)
