@@ -1,3 +1,3 @@
-module github.com/blue-plum-cloud/dynamoDB_ds
+module base
 
 go 1.20
