@@ -10,7 +10,10 @@ import (
 func TestNodeCreation(t *testing.T) {
 	close_ch := make(chan struct{})
 	num := 5
-	nodes := base.CreateNodes(close_ch, num)
+	client_ch := make(chan base.Message)
+
+	//node and token initialization
+	nodes := base.CreateNodes(client_ch, close_ch, num)
 	numNodes := len(nodes)
 	expected := 5
 	if numNodes != expected {
@@ -21,7 +24,10 @@ func TestNodeCreation(t *testing.T) {
 func TestTokenCreation(t *testing.T) {
 	close_ch := make(chan struct{})
 	num := 5
-	nodes := base.CreateNodes(close_ch, num)
+	client_ch := make(chan base.Message)
+
+	//node and token initialization
+	nodes := base.CreateNodes(client_ch, close_ch, num)
 	base.InitializeTokens(nodes, num)
 	numTokens := 0
 	for _, node := range nodes {
@@ -37,7 +43,10 @@ func TestTokenBigRange(t *testing.T) {
 	close_ch := make(chan struct{})
 	num := 3
 	numTokens := 3
-	nodes := base.CreateNodes(close_ch, num)
+	client_ch := make(chan base.Message)
+
+	//node and token initialization
+	nodes := base.CreateNodes(client_ch, close_ch, num)
 	maxValue := new(big.Int)
 	maxValue.SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16)
 	tokenCounter := 0
@@ -68,7 +77,10 @@ func TestTokenUnevenRange(t *testing.T) {
 	close_ch := make(chan struct{})
 	num := 3
 	numTokens := 5
-	nodes := base.CreateNodes(close_ch, num)
+	client_ch := make(chan base.Message)
+
+	//node and token initialization
+	nodes := base.CreateNodes(client_ch, close_ch, num)
 	maxValue := new(big.Int)
 	maxValue.SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16)
 	tokenCounter := 0

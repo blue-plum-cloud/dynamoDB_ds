@@ -14,7 +14,7 @@ func computeMD5(data string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func isHashInRange(hashStr string, lowerBound string, upperBound string) bool {
+func hashInRange(hashStr string, lowerBound string, upperBound string) bool {
 	hashInt := new(big.Int)
 	hashInt.SetString(hashStr, 16)
 
