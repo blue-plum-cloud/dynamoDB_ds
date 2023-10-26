@@ -1,5 +1,7 @@
 package base
 
+import "fmt"
+
 type Message struct {
 	//to properly define message
 	Command int
@@ -30,6 +32,8 @@ type Node struct {
 	data      map[string]*Object // key-value data store
 	backup    map[string]*Object // backup of key-value data stores
 	close_ch  chan struct{}      //to close go channels properly
+
+	tokenStruct BST
 }
 
 func (n *Node) GetTokens() []*Token {
@@ -47,10 +51,99 @@ type Token struct {
 	range_end   string
 }
 
+func (t *Token) GetID() int {
+	return t.id
+}
+
 func (t *Token) GetStartRange() string {
 	return t.range_start
 }
 
 func (t *Token) GetEndRange() string {
 	return t.range_end
+}
+
+type TreeNode struct {
+	Token *Token
+	Left  *TreeNode
+	Right *TreeNode
+}
+
+type BST struct {
+	Root *TreeNode
+}
+
+// Insert a new Token into the BST.
+func (bst *BST) Insert(token *Token) {
+	bst.Root = bst.insertTok(bst.Root, token)
+}
+
+func (bst *BST) insertTok(root *TreeNode, token *Token) *TreeNode {
+	if root == nil {
+		return &TreeNode{Token: token}
+	}
+
+	if token.range_start < root.Token.range_start {
+		root.Left = bst.insertTok(root.Left, token)
+	} else {
+		root.Right = bst.insertTok(root.Right, token)
+	}
+
+	return root
+}
+
+// Search for a Token whose range includes the given value.
+func (bst *BST) Search(value string) *TreeNode {
+	return bst.searchTok(bst.Root, value)
+}
+
+func (bst *BST) searchTok(root *TreeNode, value string) *TreeNode {
+	fmt.Printf("token %d, range start = %s, range end = %s, value = %s\n", root.Token.id, root.Token.range_start, root.Token.range_end, value)
+	if root == nil {
+		return nil
+	}
+
+	if hashInRange(value, root.Token.GetStartRange(), root.Token.GetEndRange()) {
+		return root
+	}
+
+	if hashInRange(value, value, root.Token.GetStartRange()) {
+		return bst.searchTok(root.Left, value)
+	}
+
+	return bst.searchTok(root.Right, value)
+}
+
+func (bst *BST) getNext(node *TreeNode) *TreeNode {
+	// The next node is basically the leftmost node in the right subtree.
+	if node.Right != nil {
+		return bst.leftMostNode(node.Right)
+	}
+
+	// If no right subtree, then it will be the nearest ancestor for which
+	// the given node would be in the left subtree.
+	var successor *TreeNode
+	ancestor := bst.Root
+	for ancestor != node {
+		if node.Token.range_start < ancestor.Token.range_start {
+			successor = ancestor
+			ancestor = ancestor.Left
+		} else {
+			ancestor = ancestor.Right
+		}
+	}
+
+	// If successor is nil, return the leftmost node in the tree.
+	if successor == nil {
+		return bst.leftMostNode(bst.Root)
+	}
+	return successor
+}
+
+func (bst *BST) leftMostNode(node *TreeNode) *TreeNode {
+	current := node
+	for current.Left != nil {
+		current = current.Left
+	}
+	return current
 }

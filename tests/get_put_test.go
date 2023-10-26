@@ -57,8 +57,10 @@ func TestMultiplePutSingleGet(t *testing.T) {
 	node := base.FindNode(key, phy_nodes)
 
 	node.Put(key, expected)
-	node.Put("u bad", "u good")
-	node.Put("this is", "da bomb")
+	node1 := base.FindNode("u bad", phy_nodes)
+	node1.Put("u bad", "u good")
+	node2 := base.FindNode("this is", phy_nodes)
+	node2.Put("this is", "da bomb")
 
 	actual := node.Get(key).GetData()
 

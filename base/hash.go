@@ -29,6 +29,7 @@ func hashInRange(hashStr string, lowerBound string, upperBound string) bool {
 }
 
 func InitializeTokens(phy_nodes []*Node, numTokens int) {
+	fmt.Println("Initializing tokens...")
 	maxValue := new(big.Int)
 	maxValue.SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16)
 
@@ -38,11 +39,15 @@ func InitializeTokens(phy_nodes []*Node, numTokens int) {
 	tokenRangeSize := new(big.Int).Div(maxValue, big.NewInt(int64(numTokens)))
 
 	tokenCounter := 0
+	allTokens := make([]*Token, 0)
+
 	for i, node := range phy_nodes {
 		tokensPerNode := baseTokensPerNode
 		if i < extraTokens {
 			tokensPerNode++
 		}
+
+		fmt.Println()
 
 		for j := 0; j < tokensPerNode; j++ {
 			startRange := new(big.Int).Mul(tokenRangeSize, big.NewInt(int64(tokenCounter)))
@@ -52,7 +57,7 @@ func InitializeTokens(phy_nodes []*Node, numTokens int) {
 			if tokenCounter != numTokens-1 {
 				endRange.Sub(endRange, big.NewInt(1))
 			}
-
+			// fmt.Printf("token %d, range start = %s, range end = %s\n", tokenCounter, startRange, endRange)
 			token := &Token{
 				id:          tokenCounter,
 				phy_node:    node,
@@ -61,7 +66,15 @@ func InitializeTokens(phy_nodes []*Node, numTokens int) {
 			}
 
 			node.tokens = append(node.tokens, token)
+			allTokens = append(allTokens, token)
 			tokenCounter++
+		}
+	}
+
+	// Insert all tokens into each node's tokensStruct (BST)
+	for _, node := range phy_nodes {
+		for _, token := range allTokens {
+			node.tokenStruct.Insert(token)
 		}
 	}
 }
