@@ -33,9 +33,18 @@ func InitializeTokens(phy_nodes []*Node, numTokens int) {
 	maxValue.SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16)
 
 	//fairly distribute tokens for now
-	baseTokensPerNode := numTokens / len(phy_nodes)
-	extraTokens := numTokens % len(phy_nodes)
-	tokenRangeSize := new(big.Int).Div(maxValue, big.NewInt(int64(numTokens)))
+	baseTokensPerNode := 0
+	extraTokens := 0
+	tokenRangeSize := new(big.Int)
+	if len(phy_nodes) != 0 {
+		//prevent divide by zero errors
+		baseTokensPerNode = numTokens / len(phy_nodes)
+		extraTokens = numTokens % len(phy_nodes)
+	}
+	if numTokens != 0 {
+		//prevent divide by zero errors
+		tokenRangeSize = new(big.Int).Div(maxValue, big.NewInt(int64(numTokens)))
+	}
 
 	tokenCounter := 0
 	for i, node := range phy_nodes {
