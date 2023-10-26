@@ -4,4 +4,10 @@ Simple Implementation of dynamoDB for 50.041 Distributed Systems and Computing
 
 ## How to run
 
-To run code from the dynamodb_ds directory, execute `go run main` and `go test ./tests` to run unit tests.
+To run code from the dynamodb_ds directory, execute `go run main.go`.
+
+## Tests
+
+Use command `go test ./tests` to run tests. For verbose output, use flag `-v`.
+
+Detailed description about the tests can be found at [`./tests/TESTS.md`](./tests/TESTS.md)
