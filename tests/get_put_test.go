@@ -56,6 +56,7 @@ func TestMultiplePutSingleGet(t *testing.T) {
 
 	node := base.FindNode(key, phy_nodes)
 
+	// Find the coordinator node responsible for storing the data
 	node.Put(key, expected)
 	node1 := base.FindNode("u bad", phy_nodes)
 	node1.Put("u bad", "u good")

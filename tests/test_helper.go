@@ -3,6 +3,7 @@ package tests
 import (
 	"base"
 	"fmt"
+	"sync"
 	"testing"
 )
 
@@ -11,6 +12,7 @@ import (
 */
 func setUpNodes(numNodes int, numTokens int) ([]*base.Node, chan struct{}) {
 
+	var wg sync.WaitGroup
 	//create close_ch for goroutines
 	close_ch := make(chan struct{})
 	client_ch := make(chan base.Message)

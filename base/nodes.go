@@ -1,17 +1,9 @@
 package base
 
 import (
+	"config"
 	"fmt"
 	"sync"
-)
-
-// might want to create a global constants file for this
-const (
-	REQ_READ  = 0
-	REQ_WRITE = 1
-	ACK       = 2
-
-	N = 2 // number of put replication
 )
 
 func (n *Node) Start(wg *sync.WaitGroup) {
@@ -23,12 +15,12 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 			return
 
 		case msg := <-n.rcv_ch:
-			if msg.Command == REQ_READ {
+			if msg.Command == config.REQ_READ {
 				obj := n.Get(msg.Key)
-				n.client_ch <- Message{Data: obj.GetData(), Command: ACK, Key: msg.Key}
-			} else if msg.Command == REQ_WRITE {
+				n.client_ch <- Message{Data: obj.GetData(), Command: config.ACK, Key: msg.Key}
+			} else if msg.Command == config.REQ_WRITE {
 				n.Put(msg.Key, msg.Data)
-				n.client_ch <- Message{Command: ACK, Key: msg.Key}
+				n.client_ch <- Message{Command: config.ACK, Key: msg.Key}
 			}
 		}
 
@@ -70,7 +62,7 @@ func (n *Node) Put(key string, value string) {
 	visitedNodes := make(map[int]struct{}) // To keep track of unique physical nodes
 	visitedNodes[initToken.phy_node.GetID()] = struct{}{}
 
-	replicationCount := N
+	replicationCount := config.N
 
 	for len(visitedNodes) < replicationCount {
 		fmt.Printf("Cur node = %d\n", curTreeNode.Token.GetID())
