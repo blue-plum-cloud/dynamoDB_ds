@@ -1,15 +1,9 @@
 package base
 
 import (
+	"config"
 	"fmt"
 	"sync"
-)
-
-// might want to create a global constants file for this
-const (
-	REQ_READ  = 0
-	REQ_WRITE = 1
-	ACK       = 2
 )
 
 func (n *Node) Start(wg *sync.WaitGroup) {
@@ -21,12 +15,12 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 			return
 
 		case msg := <-n.rcv_ch:
-			if msg.Command == REQ_READ {
+			if msg.Command == config.REQ_READ {
 				obj := n.Get(msg.Key)
-				n.client_ch <- Message{Data: obj.GetData(), Command: ACK, Key: msg.Key}
-			} else if msg.Command == REQ_WRITE {
+				n.client_ch <- Message{Data: obj.GetData(), Command: config.ACK, Key: msg.Key}
+			} else if msg.Command == config.REQ_WRITE {
 				n.Put(msg.Key, msg.Data)
-				n.client_ch <- Message{Command: ACK, Key: msg.Key}
+				n.client_ch <- Message{Command: config.ACK, Key: msg.Key}
 			}
 		}
 
@@ -37,6 +31,7 @@ func FindNode(key string, phy_nodes []*Node) *Node {
 	hashkey := computeMD5(key)
 	for _, node := range phy_nodes {
 		for _, token := range (*node).tokens {
+			fmt.Printf("tokenid = %d\n", token.GetID())
 			if hashInRange(hashkey, token.range_start, token.range_end) {
 				return node
 			}
@@ -55,9 +50,55 @@ func (n *Node) Put(key string, value string) {
 	n.increment_vclk()
 	copy_vclk := n.copy_vclk()
 	//create object and context from current node's state
-	newObj := Object{data: value, context: &Context{v_clk: copy_vclk}}
+	newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
 	fmt.Println(hashKey)
 	n.data[hashKey] = &newObj
+
+	fmt.Printf("Coordinator node = %d, responsible for hashkey = %032X\n", n.GetID(), hashKey)
+
+	// Replication process
+	curTreeNode := n.tokenStruct.Search(hashKey)
+	initToken := curTreeNode.Token
+	visitedNodes := make(map[int]struct{}) // To keep track of unique physical nodes
+	visitedNodes[initToken.phy_node.GetID()] = struct{}{}
+
+	replicationCount := config.N
+
+	for len(visitedNodes) < replicationCount {
+		fmt.Printf("Cur node = %d\n", curTreeNode.Token.GetID())
+		nextTreeNode := n.tokenStruct.getNext(curTreeNode)
+		curTreeNode = nextTreeNode
+		fmt.Printf("next node = %d\n", curTreeNode.Token.GetID())
+		curToken := curTreeNode.Token
+
+		// After one loop stop.
+		if curToken.GetID() == initToken.GetID() {
+			break
+		}
+
+		if _, visited := visitedNodes[curToken.phy_node.GetID()]; !visited {
+			// Replicate data to the physical node of this token
+			fmt.Printf("Replicated to node = %d, for hashkey = %s\n", curToken.phy_node.GetID(), hashKey)
+			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
+			curToken.phy_node.data[hashKey] = &newObj
+			visitedNodes[curToken.phy_node.GetID()] = struct{}{}
+		}
+
+	}
+
+	// Take the rest node to replicate to (cannot be in previously visited node)
+	res := replicationCount - len(visitedNodes)
+	for res > 0 {
+		curTreeNode = n.tokenStruct.getNext(curTreeNode)
+		curToken := curTreeNode.Token
+		if _, visited := visitedNodes[curToken.phy_node.GetID()]; !visited {
+			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
+			curToken.phy_node.data[hashKey] = &newObj
+			visitedNodes[curToken.phy_node.GetID()] = struct{}{}
+			res--
+		}
+	}
+
 }
 
 // remember to return object
@@ -84,12 +125,14 @@ func CreateNodes(client_ch chan Message, close_ch chan struct{}, numNodes int) [
 
 		//make j nodes
 		node := Node{
-			id:        j,
-			v_clk:     make([]int, numNodes),
-			rcv_ch:    make(chan Message, numNodes),
-			data:      make(map[string]*Object),
-			client_ch: client_ch,
-			close_ch:  close_ch}
+			id:          j,
+			v_clk:       make([]int, numNodes),
+			rcv_ch:      make(chan Message, numNodes),
+			data:        make(map[string]*Object),
+			tokenStruct: BST{},
+			client_ch:   client_ch,
+			close_ch:    close_ch,
+		}
 
 		nodeGroup = append(nodeGroup, &node)
 	}
