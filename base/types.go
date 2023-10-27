@@ -14,12 +14,17 @@ type Context struct {
 }
 
 type Object struct {
-	context *Context
-	data    string
+	context   *Context
+	data      string
+	isReplica bool
 }
 
 func (o *Object) GetData() string {
 	return o.data
+}
+
+func (o *Object) IsReplica() bool {
+	return o.isReplica
 }
 
 type Node struct {

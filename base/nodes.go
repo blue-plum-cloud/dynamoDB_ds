@@ -50,7 +50,7 @@ func (n *Node) Put(key string, value string) {
 	n.increment_vclk()
 	copy_vclk := n.copy_vclk()
 	//create object and context from current node's state
-	newObj := Object{data: value, context: &Context{v_clk: copy_vclk}}
+	newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
 	fmt.Println(hashKey)
 	n.data[hashKey] = &newObj
 
@@ -79,7 +79,7 @@ func (n *Node) Put(key string, value string) {
 		if _, visited := visitedNodes[curToken.phy_node.GetID()]; !visited {
 			// Replicate data to the physical node of this token
 			fmt.Printf("Replicated to node = %d, for hashkey = %s\n", curToken.phy_node.GetID(), hashKey)
-			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}}
+			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
 			curToken.phy_node.data[hashKey] = &newObj
 			visitedNodes[curToken.phy_node.GetID()] = struct{}{}
 		}
@@ -92,7 +92,7 @@ func (n *Node) Put(key string, value string) {
 		curTreeNode = n.tokenStruct.getNext(curTreeNode)
 		curToken := curTreeNode.Token
 		if _, visited := visitedNodes[curToken.phy_node.GetID()]; !visited {
-			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}}
+			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
 			curToken.phy_node.data[hashKey] = &newObj
 			visitedNodes[curToken.phy_node.GetID()] = struct{}{}
 			res--

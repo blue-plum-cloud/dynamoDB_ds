@@ -16,15 +16,21 @@ func TestSinglePutReplication(t *testing.T) {
 	node := base.FindNode("Sudipta", phy_nodes)
 
 	node.Put(key, value)
+	ori := 0
 	repCnt := 0
 	for _, n := range phy_nodes {
-		if val := n.Get(key); val.GetData() == value {
+		if val := n.Get(key); val.GetData() == value && val.IsReplica() {
 			repCnt++
+		} else if val := n.Get(key); val.GetData() == value && !val.IsReplica() {
+			ori++
 		}
 	}
-	expectedRepFactor := config.N
+	expectedRepFactor := config.N - 1
 	if repCnt != expectedRepFactor {
 		t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedRepFactor)
+	}
+	if ori != 1 {
+		t.Errorf("Original data for key '%s' is missing", key)
 	}
 }
 
@@ -38,22 +44,26 @@ func TestMultiplePutReplication(t *testing.T) {
 		"JWC":     "Bad",
 	}
 
-	expectedRepFactor := config.N
+	expectedRepFactor := config.N - 1
 
 	for key, value := range keyValuePairs {
 		node := base.FindNode(key, phy_nodes)
 		node.Put(key, value)
 
+		ori := 0
 		repCnt := 0
 		for _, n := range phy_nodes {
-			if val := n.Get(key); val.GetData() == value {
+			if val := n.Get(key); val.GetData() == value && val.IsReplica() {
 				repCnt++
+			} else if val := n.Get(key); val.GetData() == value && !val.IsReplica() {
+				ori++
 			}
 		}
-
-		// Check if the replication count matches the expected replication factor
 		if repCnt != expectedRepFactor {
 			t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedRepFactor)
+		}
+		if ori != 1 {
+			t.Errorf("Original data for key '%s' is missing", key)
 		}
 	}
 }
@@ -68,22 +78,26 @@ func TestMultiplePutReplicationManyNodes(t *testing.T) {
 		"JWC":     "Bad",
 	}
 
-	expectedRepFactor := config.N
+	expectedRepFactor := config.N - 1
 
 	for key, value := range keyValuePairs {
 		node := base.FindNode(key, phy_nodes)
 		node.Put(key, value)
 
+		ori := 0
 		repCnt := 0
 		for _, n := range phy_nodes {
-			if val := n.Get(key); val.GetData() == value {
+			if val := n.Get(key); val.GetData() == value && val.IsReplica() {
 				repCnt++
+			} else if val := n.Get(key); val.GetData() == value && !val.IsReplica() {
+				ori++
 			}
 		}
-
-		// Check if the replication count matches the expected replication factor
 		if repCnt != expectedRepFactor {
 			t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedRepFactor)
+		}
+		if ori != 1 {
+			t.Errorf("Original data for key '%s' is missing", key)
 		}
 	}
 }
