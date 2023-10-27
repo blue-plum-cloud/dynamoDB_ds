@@ -79,6 +79,7 @@ func (n *Node) Put(key string, value string) {
 		if _, visited := visitedNodes[curToken.phy_node.GetID()]; !visited {
 			// Replicate data to the physical node of this token
 			fmt.Printf("Replicated to node = %d, for hashkey = %s\n", curToken.phy_node.GetID(), hashKey)
+			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}}
 			curToken.phy_node.data[hashKey] = &newObj
 			visitedNodes[curToken.phy_node.GetID()] = struct{}{}
 		}
