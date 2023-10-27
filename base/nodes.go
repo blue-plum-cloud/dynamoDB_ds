@@ -92,6 +92,7 @@ func (n *Node) Put(key string, value string) {
 		curTreeNode = n.tokenStruct.getNext(curTreeNode)
 		curToken := curTreeNode.Token
 		if _, visited := visitedNodes[curToken.phy_node.GetID()]; !visited {
+			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}}
 			curToken.phy_node.data[hashKey] = &newObj
 			visitedNodes[curToken.phy_node.GetID()] = struct{}{}
 			res--
