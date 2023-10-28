@@ -128,12 +128,13 @@ func (n *Node) Put(key string, value string, nValue []int) {
 func (n *Node) Get(key string) *Object {
 	n.increment_vclk()
 	hashKey := computeMD5(key)
-	replicationCount := config.N
+	// replicationCount := config.N
+	R := config.R
 
 	//reconciliation
-	//1. read from N nodes, and get a slice of data Obj replicas
+	//1. read from R nodes, and get a slice of data Obj replicas
 	retrievedObjects := []*Object{} 
-	if obj, exists := n.data[hashKey]; exists { // Gather the primary copy, if it exists
+	if obj, exists := n.data[hashKey]; exists { // get data in local storage first
 		retrievedObjects = append(retrievedObjects, obj)
 	}
 
@@ -145,7 +146,7 @@ func (n *Node) Get(key string) *Object {
 	visitedNodes[initToken.phy_node.GetID()] = struct{}{}
 	visitedTokens[initToken.GetID()] = struct{}{}
 
-	for len(visitedNodes) < replicationCount {
+	for len(retrievedObjects) < R {
 		nextTreeNode := n.tokenStruct.getNext(curTreeNode)
 		curTreeNode = nextTreeNode
 		curToken := curTreeNode.Token
@@ -175,7 +176,6 @@ func (n *Node) Get(key string) *Object {
 	localObj, exists := n.data[hashKey]
 	
 	if exists && finalObject != localObj {
-		fmt.Println("Data branch detected! Need reconciliation")
 		//compare localObj clock and the retrived obj's clock
 		if compareVC(localObj.context.v_clk, finalObject.context.v_clk) == -1 { //means localObj is newer, use localObj
 			finalObject = localObj

@@ -6,4 +6,6 @@ const (
 	ACK       = 2
 
 	N = 3 // number of put replication
+
+	R = 2 
 )
