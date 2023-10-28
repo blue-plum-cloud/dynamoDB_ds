@@ -34,7 +34,6 @@ func InitializeTokens(phy_nodes []*Node, numTokens int) {
 	maxValue := new(big.Int)
 	maxValue.SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16)
 
-	//fairly distribute tokens for now
 	baseTokensPerNode := 0
 	extraTokens := 0
 	tokenRangeSize := new(big.Int)

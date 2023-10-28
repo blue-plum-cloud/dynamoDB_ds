@@ -51,7 +51,6 @@ func TestTokenRange(t *testing.T) {
 	maxValue := new(big.Int)
 	maxValue.SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16)
 
-	//fairly distribute tokens for now
 	tokenRangeSize := new(big.Int).Div(maxValue, big.NewInt(int64(num)))
 	base.InitializeTokens(nodes, num)
 
@@ -93,7 +92,6 @@ func TestTokenUnevenRange(t *testing.T) {
 	maxValue := new(big.Int)
 	maxValue.SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16)
 
-	//fairly distribute tokens for now
 	tokenRangeSize := new(big.Int).Div(maxValue, big.NewInt(int64(numTokens)))
 	base.InitializeTokens(nodes, numTokens)
 
@@ -135,7 +133,6 @@ func TestTokenRandomDistribution(t *testing.T) { //extremely low chance numToken
 	maxValue := new(big.Int)
 	maxValue.SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16)
 
-	//fairly distribute tokens for now
 	base.InitializeTokens(nodes, numTokens)
 
 	allTokens := make([]*base.Token, 0)
