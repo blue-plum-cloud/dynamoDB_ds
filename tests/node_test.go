@@ -57,9 +57,7 @@ func TestTokenRange(t *testing.T) {
 	allTokens := make([]*base.Token, 0)
 
 	for _, node := range nodes {
-		for _, token := range node.GetTokens() {
-			allTokens = append(allTokens, token)
-		}
+		allTokens = append(allTokens, node.GetTokens()...)
 	}
 
 	sort.Slice(allTokens, func(i int, j int) bool {
