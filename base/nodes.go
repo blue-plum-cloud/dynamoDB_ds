@@ -4,6 +4,7 @@ import (
 	"config"
 	"fmt"
 	"sync"
+	"time"
 )
 
 func (n *Node) Start(wg *sync.WaitGroup) {
@@ -28,6 +29,74 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 	}
 }
 
+/* Get Replication count for testing */
+func getReplicationCount(nValue []int) int {
+	replicationCount := 0
+	if len(nValue) == 0 {
+		replicationCount = config.N
+	} else {
+		if nValue[0] >= 0 {
+			replicationCount = nValue[1]
+			if nValue[2] < nValue[1] {
+				replicationCount = nValue[2]
+			}
+			if nValue[0] < replicationCount {
+				replicationCount = nValue[0]
+			}
+		} else {
+			replicationCount = 0
+		}
+	}
+	return replicationCount
+}
+
+/* Finds N+1-th available physical node from current node */
+func getHintedHandoffToken(tokenStruct BST, initNode *TreeNode, visitedNodes map[int]struct{}, replicationCount int) *Token {
+	i := replicationCount
+	treeNode := initNode
+	initToken := initNode.Token
+
+	for i > 0 {
+		treeNode := tokenStruct.getNext(treeNode)
+		
+		if treeNode.Token.GetID() == initToken.GetID() {
+			break
+		}
+
+		if _, visited := visitedNodes[treeNode.Token.phy_node.GetID()]; !visited {
+			i -= 1
+		}
+	}
+
+	return treeNode.Token
+}
+
+/* Update the node with the object */
+func updateTreeNode(tokenStruct BST, curTreeNode *TreeNode, visitedNodes map[int]struct{}, replicationCount int, hashKey string, obj *Object) {
+	curToken := curTreeNode.Token
+	if time.Since(curToken.phy_node.GetAliveSince()) < 0 {
+		// Hinted handoff to N+1-th physical node from current node
+		token := getHintedHandoffToken(tokenStruct, curTreeNode, visitedNodes, replicationCount)
+		node := token.phy_node
+		
+		node.backup[hashKey] = obj
+		node.backupTokens = append(node.backupTokens, token)
+		visitedNodes[node.GetID()] = struct{}{}
+		
+		if config.DEBUG_LEVEL >= 2 {
+			fmt.Printf("Handoff to token=%d, node=%d\n", token.GetID(), node.GetID())
+		}
+
+	} else {
+		// Replicate data to the physical node of this token
+		curToken.phy_node.data[hashKey] = obj
+		visitedNodes[curToken.phy_node.GetID()] = struct{}{}
+		if config.DEBUG_LEVEL >= 2 {
+			fmt.Printf("Replicated to token=%d, node=%d\n", curToken.GetID(), curToken.phy_node.GetID())
+		}
+	}
+}
+
 /* Traverses token BST struc, assumed to be consistent across all nodes */
 func FindNode(key string, phy_nodes []*Node) *Node {
 	hashkey := computeMD5(key)
@@ -48,39 +117,22 @@ func (n *Node) GetChannel() chan Message {
 // internal function
 // Pass in global config details (PhysicalNum, VirtualNum, ReplicationNum)
 func (n *Node) Put(key string, value string, nValue []int) {
+	replicationCount := getReplicationCount(nValue)
+
 	hashKey := computeMD5(key)
 	n.increment_vclk()
 	copy_vclk := n.copy_vclk()
-	//create object and context from current node's state
-	newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
-	n.data[hashKey] = &newObj
 
 	fmt.Printf("Coordinator node = %d, responsible for hashkey = %032X\n", n.GetID(), hashKey)
 
 	// Replication process
 	curTreeNode := n.tokenStruct.Search(hashKey)
 	initToken := curTreeNode.Token
-
-	// Use map for set implementation in golang. Use struct{} instead of bool to occupy 0 space
-	visitedNodes := make(map[int]struct{})  // To keep track of unique physical nodes
-	visitedNodes[initToken.phy_node.GetID()] = struct{}{}
-
-	replicationCount := 0
-	if len(nValue) == 0 {
-		replicationCount = config.N
-	} else {
-		if nValue[0] >= 0 {
-			replicationCount = nValue[1]
-			if nValue[2] < nValue[1] {
-				replicationCount = nValue[2]
-			}
-			if nValue[0] < replicationCount {
-				replicationCount = nValue[0]
-			}
-		} else {
-			replicationCount = 0
-		}
-	}
+	visitedNodes := make(map[int]struct{})  // To keep track of unique physical nodes. Use map as set. Use struct{} to occupy 0 space
+	
+	// Coordinator copy
+	newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
+	updateTreeNode(n.tokenStruct, curTreeNode, visitedNodes, replicationCount, hashKey, &newObj)
 
 	for len(visitedNodes) < replicationCount {
 		nextTreeNode := n.tokenStruct.getNext(curTreeNode)
@@ -93,13 +145,8 @@ func (n *Node) Put(key string, value string, nValue []int) {
 		}
 
 		if _, visited := visitedNodes[curToken.phy_node.GetID()]; !visited {
-			// Replicate data to the physical node of this token
-			if config.DEBUG_LEVEL >= 2 {
-				fmt.Printf("Replicated to token=%d, node=%d\n", curToken.GetID(), curToken.phy_node.GetID())
-			}
 			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
-			curToken.phy_node.data[hashKey] = &newObj
-			visitedNodes[curToken.phy_node.GetID()] = struct{}{}
+			updateTreeNode(n.tokenStruct, curTreeNode, visitedNodes, replicationCount, hashKey, &newObj)
 		}
 	}
 }
@@ -111,6 +158,11 @@ func (n *Node) Get(key string) *Object {
 	hashKey := computeMD5(key)
 	obj, exists := n.data[hashKey]
 	//reconciliation function here
+	if exists {
+		return obj
+	} 
+	
+	obj, exists = n.backup[hashKey]
 	if exists {
 		return obj
 	} else {

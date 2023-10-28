@@ -3,6 +3,7 @@ package base
 import (
 	"config"
 	"fmt"
+	"time"
 )
 
 type Message struct {
@@ -41,7 +42,9 @@ type Node struct {
 	backup    map[string]*Object // backup of key-value data stores
 	close_ch  chan struct{}      //to close go channels properly
 
+	backupTokens []*Token
 	tokenStruct BST
+	aliveSince time.Time
 }
 
 func (n *Node) GetTokens() []*Token {
@@ -54,6 +57,14 @@ func (n *Node) GetID() int {
 
 func (n *Node) GetTokenStruct() BST {
 	return n.tokenStruct
+}
+
+func (n *Node) GetAliveSince() time.Time {
+	return n.aliveSince
+}
+
+func (n *Node) SetAliveSince(alive time.Time) {
+	n.aliveSince = alive
 }
 
 type Token struct {
