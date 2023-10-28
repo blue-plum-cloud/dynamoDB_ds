@@ -1,6 +1,7 @@
 package base
 
 import (
+	"config"
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
@@ -67,6 +68,9 @@ func InitializeTokens(phy_nodes []*Node, numTokens int) {
 		allTokens = append(allTokens, token)
 	}
 
+	if config.DEBUG_LEVEL >= 2 {
+		rand.Seed(0)
+	}
 	rand.Shuffle(len(allTokens), func(i, j int) { allTokens[i], allTokens[j] = allTokens[j], allTokens[i] })
 
 	tokenCounter := 0
@@ -88,9 +92,25 @@ func InitializeTokens(phy_nodes []*Node, numTokens int) {
 	}
 
 	// Insert all tokens into each node's tokensStruct (BST)
+	if config.DEBUG_LEVEL >= 3 {
+		fmt.Printf("All tokens ==== \n")
+		for _, token := range allTokens {
+			fmt.Printf("token: %v\n", token)
+		}
+		fmt.Printf("\n")
+	}
+
 	for _, node := range phy_nodes {
 		for _, token := range allTokens {
 			node.tokenStruct.Insert(token)
+		}
+	}
+
+	if config.DEBUG_LEVEL >= 3 {
+		fmt.Printf("Inserted tokens ==== \n")
+		for _, node := range phy_nodes {
+			node.tokenStruct.PrintBST()
+			fmt.Printf("\n")
 		}
 	}
 }
