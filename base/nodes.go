@@ -129,16 +129,8 @@ func (n *Node) Get(key string) *Object {
 	n.increment_vclk()
 	hashKey := computeMD5(key)
 	replicationCount := config.N
-	// copy_vclk := n.copy_vclk()
 
-	// fmt.Printf("Printing n.data in Get():  %v\n", n.data)
-	// fmt.Printf("Printing n.data[HashKey] in Get():  %v\n", n.data[hashKey])
-	for k, v := range n.data {
-		fmt.Printf("Key: %s, Value: %v\n", k, v)
-	}
-
-
-	//reconciliation function starts here
+	//reconciliation
 	//1. read from N nodes, and get a slice of data Obj replicas
 	retrievedObjects := []*Object{} 
 	if obj, exists := n.data[hashKey]; exists { // Gather the primary copy, if it exists
@@ -154,17 +146,14 @@ func (n *Node) Get(key string) *Object {
 	visitedTokens[initToken.GetID()] = struct{}{}
 
 	for len(visitedNodes) < replicationCount {
-		fmt.Printf("Cur node = %d\n", curTreeNode.Token.GetID())
 		nextTreeNode := n.tokenStruct.getNext(curTreeNode)
 		curTreeNode = nextTreeNode
-		fmt.Printf("next node = %d\n", curTreeNode.Token.GetID())
 		curToken := curTreeNode.Token
 
 		// stop after 1 loop
 		if curToken.GetID() == initToken.GetID() {
 			break
 		}
-
 		if _, visited := visitedNodes[curToken.phy_node.GetID()]; !visited {
 			// check if the data exists
 			obj, exists := curToken.phy_node.data[hashKey]
@@ -179,33 +168,31 @@ func (n *Node) Get(key string) *Object {
 
 	fmt.Printf("This is retrievedObjects:   %v\n", retrievedObjects)
 
-
 	//2. version compare and reconciliation
 	finalObject := n.reconcile(retrievedObjects)
 
 	//3, check if the retrived obj is same as local
 	localObj, exists := n.data[hashKey]
+	
 	if exists && finalObject != localObj {
 		fmt.Println("Data branch detected! Need reconciliation")
-		finalObject = n.data[hashKey]
+		//compare localObj clock and the retrived obj's clock
+		if compareVC(localObj.context.v_clk, finalObject.context.v_clk) == -1 { //means localObj is newer, use localObj
+			finalObject = localObj
+			//sync with other nodes function here?
+		} else {
+			//means finalObject is newer, update localObj
+			n.data[hashKey] = finalObject
+		}
+
 	} else if !exists{
 		fmt.Println("No data associated with the key is found!!")
-		n.data[hashKey] = finalObject
+		finalObject = &Object{}
 	}
 
 	fmt.Printf("This is finalObject:   %v\n", finalObject)
 
 	return finalObject
-
-
-
-	// if exists {
-	// 	return obj
-	// } else {
-	// 	newObj := Object{}
-	// 	return &newObj
-	// }
-
 }
 
 //helper func for GET
@@ -215,15 +202,13 @@ func (n *Node) reconcile(objects []*Object) *Object {
 	}
 
 	latestObj := objects[0] //first obj will be the initial point of reference
+
 	for _, obj := range objects {
-		if compareVC(obj.context.v_clk, latestObj.context.v_clk) == 1 { //when no conflict (ClockA strictly lesser than B)
-			latestObj = obj
-		}
 		if compareVC(obj.context.v_clk, latestObj.context.v_clk) == -1 {
-			fmt.Println("Theres a conflict, need to reconcile")
-		}
-		if compareVC(obj.context.v_clk, latestObj.context.v_clk) == 0 {
-			fmt.Println("This shouldnt happen but there are identical clocks??")
+			//do nothing, means latestObj=objects[0] alrd has the latest clock
+
+		} else { //when no conflict (i.e: Clock A <=  than B)
+			latestObj = obj
 		}
 
 	}
