@@ -45,6 +45,9 @@ func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
 				}
 			}
 			expectedRepFactor := tt.nValue - 1
+			if tt.nValue-1 > tt.numNodes {
+				expectedRepFactor = tt.numNodes - 1
+			}
 			if repCnt != expectedRepFactor {
 				t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedRepFactor)
 			}
