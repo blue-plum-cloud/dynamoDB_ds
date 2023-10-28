@@ -3,21 +3,70 @@ package main
 import (
 	"base"
 	"bufio"
+	"config"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 var wg sync.WaitGroup
 
-const (
-	numNodes  = 5
-	numTokens = 5
 
-	REQ_READ  = 0
-	REQ_WRITE = 1
-)
+func ParseGetCommand(input string) (string, error) {
+	key := strings.TrimSuffix(strings.TrimPrefix(input, "get("), ")")
+	parts := strings.SplitN(key, ",", 2)
+	if len(parts) != 1 {
+		return "", errors.New("Invalid input for get. Expect get(string)")
+	}
+	return key, nil
+}
+
+func ListenGetReply(key string, client_ch chan base.Message) {
+	select {
+		case value := <- client_ch: // reply received in time
+			if value.Key != key {
+				panic("wrong key!")
+			}
+
+			//i'm sure there's a better way here
+			if value.Data != "" {
+				fmt.Println("value is: ", value.Data)
+			} else {
+				fmt.Println("data not found!")
+			}
+		
+		case <- time.After(config.CLIENT_GET_TIMEOUT_MS * time.Millisecond): // timeout reached
+			fmt.Println("Get Timeout reached")
+	}
+}
+
+func ParsePutCommand(input string) (string, string, error) {
+	remainder := strings.TrimSuffix(strings.TrimPrefix(input, "put("), ")")
+	parts := strings.SplitN(remainder, ",", 2)
+	if len(parts) != 2 {
+		return "", "", errors.New("Invalid input for put. Expect put(string, string)")
+	}
+	key := strings.TrimSpace(parts[0])
+	value := strings.TrimSpace(parts[1])
+	return key, value, nil
+}
+
+func ListenPutReply(key string, value string, client_ch chan base.Message) {
+	select {
+		case ack := <- client_ch: // reply received in time
+			if ack.Key != key {
+				panic("wrong key!")
+			}
+
+			fmt.Println("Value stored: ", value, " with key: ", key)
+		
+		case <- time.After(config.CLIENT_PUT_TIMEOUT_MS * time.Millisecond): // timeout reached
+			fmt.Println("Put Timeout reached")
+	}
+}
 
 func main() {
 	fmt.Println("Starting the application...")
@@ -28,8 +77,8 @@ func main() {
 	client_ch := make(chan base.Message)
 
 	//node and token initialization
-	phy_nodes := base.CreateNodes(client_ch, close_ch, numNodes)
-	base.InitializeTokens(phy_nodes, numTokens)
+	phy_nodes := base.CreateNodes(client_ch, close_ch, config.NUM_NODES)
+	base.InitializeTokens(phy_nodes, config.NUM_TOKENS)
 
 	//run nodes
 	for i := range phy_nodes {
@@ -44,57 +93,37 @@ func main() {
 
 		//user inputs get()
 		if strings.HasPrefix(input, "get(") && strings.HasSuffix(input, ")") {
-			key := strings.TrimSuffix(strings.TrimPrefix(input, "get("), ")")
-			parts := strings.SplitN(key, ",", 2)
-			if len(parts) != 1 {
-				fmt.Println("Invalid input")
+			key, err := ParseGetCommand(input)
+			if err != nil {
+				fmt.Println(err)
 				continue
 			}
+			
 			node := base.FindNode(key, phy_nodes)
-
 			channel := (*node).GetChannel()
-			channel <- base.Message{Key: key, Command: REQ_READ}
+			channel <- base.Message{Key: key, Command: config.REQ_READ}
 
-			//wait for node to reply, might want to set timeout here in case node dies
-			value := <-client_ch
-			if value.Key != key {
-				panic("wrong key!")
-			}
-
-			//i'm sure there's a better way here
-			if value.Data != "" {
-				fmt.Println("value is: ", value.Data)
-			} else {
-				fmt.Println("data not found!")
-			}
+			ListenGetReply(key, client_ch)
 
 		} else if strings.HasPrefix(input, "put(") && strings.HasSuffix(input, ")") {
-			remainder := strings.TrimSuffix(strings.TrimPrefix(input, "put("), ")")
-			parts := strings.SplitN(remainder, ",", 2)
-			if len(parts) != 2 {
-				fmt.Println("Invalid input")
+			key, value, err := ParsePutCommand(input)
+			if err != nil {
+				fmt.Println(err)
 				continue
 			}
-			key := strings.TrimSpace(parts[0])
-			value := strings.TrimSpace(parts[1])
+
 			node := base.FindNode(key, phy_nodes)
 			channel := (*node).GetChannel()
-			channel <- base.Message{Key: key, Command: REQ_WRITE, Data: value}
+			channel <- base.Message{Key: key, Command: config.REQ_WRITE, Data: value}
 
-			//wait for node to reply, might want to set timeout here in case node dies
-			ack := <-client_ch
-			if ack.Key != key {
-				panic("wrong key!")
-			}
-
-			fmt.Println("Value stored: ", value, " with key: ", key)
+			ListenPutReply(key, value, client_ch)
 
 		} else if input == "exit" {
 			close(close_ch)
 			break
 
 		} else {
-			fmt.Println("Invalid input")
+			fmt.Println("Invalid input. Expected get(string), put(string, string) or exit")
 		}
 	}
 	wg.Wait()
