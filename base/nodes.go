@@ -128,15 +128,119 @@ func (n *Node) Put(key string, value string, nValue []int) {
 func (n *Node) Get(key string) *Object {
 	n.increment_vclk()
 	hashKey := computeMD5(key)
-	obj, exists := n.data[hashKey]
-	//reconciliation function here
-	if exists {
-		return obj
-	} else {
-		newObj := Object{}
-		return &newObj
+	replicationCount := config.N
+	// copy_vclk := n.copy_vclk()
+
+	// fmt.Printf("Printing n.data in Get():  %v\n", n.data)
+	// fmt.Printf("Printing n.data[HashKey] in Get():  %v\n", n.data[hashKey])
+	for k, v := range n.data {
+		fmt.Printf("Key: %s, Value: %v\n", k, v)
 	}
 
+
+	//reconciliation function starts here
+	//1. read from N nodes, and get a slice of data Obj replicas
+	retrievedObjects := []*Object{} 
+	if obj, exists := n.data[hashKey]; exists { // Gather the primary copy, if it exists
+		retrievedObjects = append(retrievedObjects, obj)
+	}
+
+	curTreeNode := n.tokenStruct.Search(hashKey)
+	initToken := curTreeNode.Token
+	visitedNodes := make(map[int]struct{}) // To keep track of unique physical nodes
+	visitedTokens := make(map[int]struct{}) // To keep track of unique virtual nodes
+
+	visitedNodes[initToken.phy_node.GetID()] = struct{}{}
+	visitedTokens[initToken.GetID()] = struct{}{}
+
+	for len(visitedNodes) < replicationCount {
+		fmt.Printf("Cur node = %d\n", curTreeNode.Token.GetID())
+		nextTreeNode := n.tokenStruct.getNext(curTreeNode)
+		curTreeNode = nextTreeNode
+		fmt.Printf("next node = %d\n", curTreeNode.Token.GetID())
+		curToken := curTreeNode.Token
+
+		// stop after 1 loop
+		if curToken.GetID() == initToken.GetID() {
+			break
+		}
+
+		if _, visited := visitedNodes[curToken.phy_node.GetID()]; !visited {
+			// check if the data exists
+			obj, exists := curToken.phy_node.data[hashKey]
+			if exists {
+				retrievedObjects = append(retrievedObjects, obj)
+			}
+			visitedTokens[curToken.GetID()] = struct{}{}
+			visitedNodes[curToken.phy_node.GetID()] = struct{}{}
+		}
+
+	}
+
+	fmt.Printf("This is retrievedObjects:   %v\n", retrievedObjects)
+
+
+	//2. version compare and reconciliation
+	finalObject := n.reconcile(retrievedObjects)
+
+	//3, check if the retrived obj is same as local
+	localObj, exists := n.data[hashKey]
+	if exists && finalObject != localObj {
+		fmt.Println("Data branch detected! Need reconciliation")
+		finalObject = n.data[hashKey]
+	} else if !exists{
+		fmt.Println("No data associated with the key is found!!")
+		n.data[hashKey] = finalObject
+	}
+
+	fmt.Printf("This is finalObject:   %v\n", finalObject)
+
+	return finalObject
+
+
+
+	// if exists {
+	// 	return obj
+	// } else {
+	// 	newObj := Object{}
+	// 	return &newObj
+	// }
+
+}
+
+//helper func for GET
+func (n *Node) reconcile(objects []*Object) *Object {
+	if len(objects) == 0 {
+		return nil
+	}
+
+	latestObj := objects[0] //first obj will be the initial point of reference
+	for _, obj := range objects {
+		if compareVC(obj.context.v_clk, latestObj.context.v_clk) == 1 { //when no conflict (ClockA strictly lesser than B)
+			latestObj = obj
+		}
+		if compareVC(obj.context.v_clk, latestObj.context.v_clk) == -1 {
+			fmt.Println("Theres a conflict, need to reconcile")
+		}
+		if compareVC(obj.context.v_clk, latestObj.context.v_clk) == 0 {
+			fmt.Println("This shouldnt happen but there are identical clocks??")
+		}
+
+	}
+	return latestObj
+}
+
+//helper func for GET
+// if A -> B, A strictly lesser than B
+func compareVC(a,b []int) int {
+	for i := range a {
+		if a[i] > b[i] {
+			return -1
+		} else if a[i] < b[i] {
+			return 1
+		}
+	}
+	return 0
 }
 
 func CreateNodes(client_ch chan Message, close_ch chan struct{}, numNodes int) []*Node {

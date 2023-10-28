@@ -51,6 +51,7 @@ func main() {
 				continue
 			}
 			node := base.FindNode(key, phy_nodes)
+			// node := phy_nodes[3]
 
 			channel := (*node).GetChannel()
 			channel <- base.Message{Key: key, Command: REQ_READ}
