@@ -1,6 +1,9 @@
 package base
 
-import "fmt"
+import (
+	"config"
+	"fmt"
+)
 
 type Message struct {
 	//to properly define message
@@ -30,7 +33,7 @@ func (o *Object) IsReplica() bool {
 type Node struct {
 	id        int
 	v_clk     []int
-	channels  []chan Message
+	channels  []chan Message // TODO: improve ease of adding and removing node channels
 	rcv_ch    chan Message
 	client_ch chan Message //communicates with "frontend" client
 	tokens    []*Token
@@ -38,7 +41,7 @@ type Node struct {
 	backup    map[string]*Object // backup of key-value data stores
 	close_ch  chan struct{}      //to close go channels properly
 
-	tokenStruct BST
+	tokenStruct *BST
 }
 
 func (n *Node) GetTokens() []*Token {
@@ -47,6 +50,10 @@ func (n *Node) GetTokens() []*Token {
 
 func (n *Node) GetID() int {
 	return n.id
+}
+
+func (n *Node) GetTokenStruct() *BST {
+	return n.tokenStruct
 }
 
 type Token struct {
@@ -103,7 +110,11 @@ func (bst *BST) Search(value string) *TreeNode {
 }
 
 func (bst *BST) searchTok(root *TreeNode, value string) *TreeNode {
-	fmt.Printf("token %d, range start = %s, range end = %s, value = %s\n", root.Token.id, root.Token.range_start, root.Token.range_end, value)
+	if config.DEBUG_LEVEL >= 3 {
+		fmt.Printf("token %d, range start = %s, range end = %s, value = %s\n", 
+			root.Token.id, root.Token.range_start, root.Token.range_end, value)
+	}
+
 	if root == nil {
 		return nil
 	}
@@ -151,4 +162,13 @@ func (bst *BST) leftMostNode(node *TreeNode) *TreeNode {
 		current = current.Left
 	}
 	return current
+}
+
+func (bst *BST) PrintBST() {
+	fmt.Printf("%v\n", bst.Root.Token)
+	node := bst.getNext(bst.Root)
+	for node != bst.Root {
+		fmt.Printf("%v\n", node.Token)
+		node = bst.getNext(node)
+	}
 }
