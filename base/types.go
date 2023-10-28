@@ -41,7 +41,7 @@ type Node struct {
 	backup    map[string]*Object // backup of key-value data stores
 	close_ch  chan struct{}      //to close go channels properly
 
-	tokenStruct *BST
+	tokenStruct BST
 }
 
 func (n *Node) GetTokens() []*Token {
@@ -52,7 +52,7 @@ func (n *Node) GetID() int {
 	return n.id
 }
 
-func (n *Node) GetTokenStruct() *BST {
+func (n *Node) GetTokenStruct() BST {
 	return n.tokenStruct
 }
 

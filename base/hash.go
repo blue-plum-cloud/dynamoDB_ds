@@ -109,7 +109,7 @@ func InitializeTokens(phy_nodes []*Node, numTokens int) {
 	if config.DEBUG_LEVEL >= 3 {
 		fmt.Printf("Inserted tokens ==== \n")
 		for _, node := range phy_nodes {
-			node.GetTokenStruct().PrintBST()
+			node.tokenStruct.PrintBST()
 			fmt.Printf("\n")
 		}
 	}

@@ -132,7 +132,7 @@ func CreateNodes(client_ch chan Message, close_ch chan struct{}, numNodes int) [
 			v_clk:       make([]int, numNodes),
 			rcv_ch:      make(chan Message, numNodes),
 			data:        make(map[string]*Object),
-			tokenStruct: new(BST),
+			tokenStruct: BST{},
 			client_ch:   client_ch,
 			close_ch:    close_ch,
 		}
