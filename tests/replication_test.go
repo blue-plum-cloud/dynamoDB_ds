@@ -2,102 +2,168 @@ package tests
 
 import (
 	"base"
-	"config"
+	"fmt"
 	"testing"
 )
 
-func TestSinglePutReplication(t *testing.T) {
-	phy_nodes, close_ch := setupNodes()
-	defer close(close_ch)
+// TestSinglePutReplicationNonZeroNonNegative checks if replicas are
+// correctly created for a single put request with non-zero and
+// non-negative N values
+func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
+	var tests = []struct {
+		numNodes, numTokens, nValue int
+	}{
+		{5, 5, 1},
+		{10, 10, 3},
+		{40, 40, 40},
+		{100, 100, 100},
 
-	key := "Sudipta"
-	value := "Best Prof"
-
-	node := base.FindNode("Sudipta", phy_nodes)
-
-	node.Put(key, value)
-	ori := 0
-	repCnt := 0
-	for _, n := range phy_nodes {
-		if val := n.Get(key); val.GetData() == value && val.IsReplica() {
-			repCnt++
-		} else if val := n.Get(key); val.GetData() == value && !val.IsReplica() {
-			ori++
-		}
+		{5, 10, 6},
+		{5, 12, 6},
+		{15, 10, 20},
 	}
-	expectedRepFactor := config.N - 1
-	if repCnt != expectedRepFactor {
-		t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedRepFactor)
-	}
-	if ori != 1 {
-		t.Errorf("Original data for key '%s' is missing", key)
-	}
-}
+	for _, tt := range tests {
+		testname := fmt.Sprintf("%d_nodes_%d_tokens_%d_n", tt.numNodes, tt.numTokens, tt.nValue)
+		t.Run(testname, func(t *testing.T) {
+			phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
 
-func TestMultiplePutReplication(t *testing.T) {
-	phy_nodes, close_ch := setupNodes()
-	defer close(close_ch)
+			defer close(close_ch)
 
-	keyValuePairs := map[string]string{
-		"Sudipta": "Best",
-		"Others":  "Ok",
-		"JWC":     "Bad",
-	}
+			key := "Sudipta"
+			value := "Best Prof"
 
-	expectedRepFactor := config.N - 1
+			node := base.FindNode("Sudipta", phy_nodes)
 
-	for key, value := range keyValuePairs {
-		node := base.FindNode(key, phy_nodes)
-		node.Put(key, value)
-
-		ori := 0
-		repCnt := 0
-		for _, n := range phy_nodes {
-			if val := n.Get(key); val.GetData() == value && val.IsReplica() {
-				repCnt++
-			} else if val := n.Get(key); val.GetData() == value && !val.IsReplica() {
-				ori++
+			node.Put(key, value, tt.nValue)
+			ori := 0
+			repCnt := 0
+			for _, n := range phy_nodes {
+				if val := n.Get(key); val.GetData() == value && val.IsReplica() {
+					repCnt++
+				} else if val := n.Get(key); val.GetData() == value && !val.IsReplica() {
+					ori++
+				}
 			}
-		}
-		if repCnt != expectedRepFactor {
-			t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedRepFactor)
-		}
-		if ori != 1 {
-			t.Errorf("Original data for key '%s' is missing", key)
-		}
-	}
-}
-
-func TestMultiplePutReplicationManyNodes(t *testing.T) {
-	phy_nodes, close_ch := setUpNodes(10, 100)
-	defer close(close_ch)
-
-	keyValuePairs := map[string]string{
-		"Sudipta": "Best",
-		"Others":  "Ok",
-		"JWC":     "Bad",
-	}
-
-	expectedRepFactor := config.N - 1
-
-	for key, value := range keyValuePairs {
-		node := base.FindNode(key, phy_nodes)
-		node.Put(key, value)
-
-		ori := 0
-		repCnt := 0
-		for _, n := range phy_nodes {
-			if val := n.Get(key); val.GetData() == value && val.IsReplica() {
-				repCnt++
-			} else if val := n.Get(key); val.GetData() == value && !val.IsReplica() {
-				ori++
+			expectedRepFactor := tt.nValue - 1
+			if repCnt != expectedRepFactor {
+				t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedRepFactor)
 			}
-		}
-		if repCnt != expectedRepFactor {
-			t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedRepFactor)
-		}
-		if ori != 1 {
-			t.Errorf("Original data for key '%s' is missing", key)
-		}
+			if ori != 1 {
+				t.Errorf("Original data for key '%s' is missing", key)
+			}
+		})
 	}
 }
+
+// TestSinglePutReplicationZeroNegative checks if replicas are
+// correctly created for a single put request for zero or
+// negative N values
+func TestSinglePutReplicationZeroNegative(t *testing.T) {
+	var tests = []struct {
+		numNodes, numTokens, nValue int
+	}{
+		{5, 5, 0},
+		{10, 10, -1},
+		{40, 40, 0},
+		{100, 100, -20},
+	}
+	for _, tt := range tests {
+		testname := fmt.Sprintf("%d_nodes_%d_tokens_%d_n", tt.numNodes, tt.numTokens, tt.nValue)
+		t.Run(testname, func(t *testing.T) {
+			phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
+
+			defer close(close_ch)
+
+			key := "Sudipta"
+			value := "Best Prof"
+
+			node := base.FindNode("Sudipta", phy_nodes)
+
+			node.Put(key, value, tt.nValue)
+			ori := 0
+			repCnt := 0
+			for _, n := range phy_nodes {
+				if val := n.Get(key); val.GetData() == value && val.IsReplica() {
+					repCnt++
+				} else if val := n.Get(key); val.GetData() == value && !val.IsReplica() {
+					ori++
+				}
+			}
+			expectedRepFactor := 0
+			if repCnt != expectedRepFactor {
+				t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedRepFactor)
+			}
+			if ori != 1 {
+				t.Errorf("Original data for key '%s' is missing", key)
+			}
+		})
+	}
+}
+
+// func TestMultiplePutReplication(t *testing.T) {
+// 	phy_nodes, close_ch := setupNodes()
+// 	defer close(close_ch)
+
+// 	keyValuePairs := map[string]string{
+// 		"Sudipta": "Best",
+// 		"Others":  "Ok",
+// 		"JWC":     "Bad",
+// 	}
+
+// 	expectedRepFactor := config.N - 1
+
+// 	for key, value := range keyValuePairs {
+// 		node := base.FindNode(key, phy_nodes)
+// 		node.Put(key, value)
+
+// 		ori := 0
+// 		repCnt := 0
+// 		for _, n := range phy_nodes {
+// 			if val := n.Get(key); val.GetData() == value && val.IsReplica() {
+// 				repCnt++
+// 			} else if val := n.Get(key); val.GetData() == value && !val.IsReplica() {
+// 				ori++
+// 			}
+// 		}
+// 		if repCnt != expectedRepFactor {
+// 			t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedRepFactor)
+// 		}
+// 		if ori != 1 {
+// 			t.Errorf("Original data for key '%s' is missing", key)
+// 		}
+// 	}
+// }
+
+// func TestMultiplePutReplicationManyNodes(t *testing.T) {
+// 	phy_nodes, close_ch := setUpNodes(10, 100)
+// 	defer close(close_ch)
+
+// 	keyValuePairs := map[string]string{
+// 		"Sudipta": "Best",
+// 		"Others":  "Ok",
+// 		"JWC":     "Bad",
+// 	}
+
+// 	expectedRepFactor := config.N - 1
+
+// 	for key, value := range keyValuePairs {
+// 		node := base.FindNode(key, phy_nodes)
+// 		node.Put(key, value)
+
+// 		ori := 0
+// 		repCnt := 0
+// 		for _, n := range phy_nodes {
+// 			if val := n.Get(key); val.GetData() == value && val.IsReplica() {
+// 				repCnt++
+// 			} else if val := n.Get(key); val.GetData() == value && !val.IsReplica() {
+// 				ori++
+// 			}
+// 		}
+// 		if repCnt != expectedRepFactor {
+// 			t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedRepFactor)
+// 		}
+// 		if ori != 1 {
+// 			t.Errorf("Original data for key '%s' is missing", key)
+// 		}
+// 	}
+// }

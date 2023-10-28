@@ -10,4 +10,6 @@ To run code from the dynamodb_ds directory, execute `go run main.go`.
 
 Use command `go test ./tests` to run tests. For verbose output, use flag `-v`.
 
+To run single test, use flag `-run <testname>`
+
 Detailed description about the tests can be found at [`./tests/TESTS.md`](./tests/TESTS.md)
