@@ -46,6 +46,7 @@ func (n *Node) GetChannel() chan Message {
 }
 
 // internal function
+// Pass in global config details (PhysicalNum, VirtualNum, ReplicationNum)
 func (n *Node) Put(key string, value string, nValue []int) {
 	hashKey := computeMD5(key)
 	n.increment_vclk()
