@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"math/rand"
 )
 
 // Function to compute the MD5 hash of a string
@@ -47,9 +48,30 @@ func InitializeTokens(phy_nodes []*Node, numTokens int) {
 		tokenRangeSize = new(big.Int).Div(maxValue, big.NewInt(int64(numTokens)))
 	}
 
-	tokenCounter := 0
 	allTokens := make([]*Token, 0)
 
+	//token init phase
+	for i := 0; i < numTokens; i++ {
+		startRange := new(big.Int).Mul(tokenRangeSize, big.NewInt(int64(i)))
+		endRange := new(big.Int).Mul(tokenRangeSize, big.NewInt(int64(i+1)))
+
+		//to prevent address overlap
+		if i != numTokens-1 {
+			endRange.Sub(endRange, big.NewInt(1))
+		}
+		// fmt.Printf("token %d, range start = %s, range end = %s\n", tokenCounter, startRange, endRange)
+		token := &Token{
+			id:          i,
+			range_start: fmt.Sprintf("%032X", startRange),
+			range_end:   fmt.Sprintf("%032X", endRange),
+		}
+		allTokens = append(allTokens, token)
+	}
+
+	rand.Shuffle(len(allTokens), func(i, j int) { allTokens[i], allTokens[j] = allTokens[j], allTokens[i] })
+
+	tokenCounter := 0
+	//assignment phase
 	for i, node := range phy_nodes {
 		tokensPerNode := baseTokensPerNode
 		if i < extraTokens {
@@ -57,27 +79,13 @@ func InitializeTokens(phy_nodes []*Node, numTokens int) {
 		}
 
 		fmt.Println()
-
 		for j := 0; j < tokensPerNode; j++ {
-			startRange := new(big.Int).Mul(tokenRangeSize, big.NewInt(int64(tokenCounter)))
-			endRange := new(big.Int).Mul(tokenRangeSize, big.NewInt(int64(tokenCounter+1)))
-
-			//to prevent address overlap
-			if tokenCounter != numTokens-1 {
-				endRange.Sub(endRange, big.NewInt(1))
-			}
-			// fmt.Printf("token %d, range start = %s, range end = %s\n", tokenCounter, startRange, endRange)
-			token := &Token{
-				id:          tokenCounter,
-				phy_node:    node,
-				range_start: fmt.Sprintf("%032X", startRange),
-				range_end:   fmt.Sprintf("%032X", endRange),
-			}
-
+			token := allTokens[tokenCounter]
+			token.phy_node = node
 			node.tokens = append(node.tokens, token)
-			allTokens = append(allTokens, token)
 			tokenCounter++
 		}
+
 	}
 
 	// Insert all tokens into each node's tokensStruct (BST)
