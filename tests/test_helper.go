@@ -3,6 +3,7 @@ package tests
 import (
 	"base"
 	"fmt"
+	"math/rand"
 	"sync"
 	"testing"
 )
@@ -68,4 +69,17 @@ func TestSinglePutSingleGet(t *testing.T) {
 			close(close_ch)
 		})
 	}
+}
+
+// generateRandomString generates a random string (min 1 char) with maximum
+// length defined by maxN
+func generateRandomString(maxN int) string {
+	letterRunes := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	n := 1 + rand.Intn(maxN)
+
+	res := make([]rune, n)
+	for i := range res {
+		res[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(res)
 }
