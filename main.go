@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -68,6 +69,17 @@ func ListenPutReply(key string, value string, client_ch chan base.Message) {
 	}
 }
 
+func ParseKillCommand(input string) (int, int, error) {
+	remainder := strings.TrimSuffix(strings.TrimPrefix(input, "kill("), ")")
+	parts := strings.SplitN(remainder, ",", 2)
+	if len(parts) != 2 {
+		return 0, 0, errors.New("Invalid input for kill. Expect kill(int, int)")
+	}
+	nodeIdx, _ := strconv.Atoi(strings.TrimSpace(parts[0]))
+	duration, _ := strconv.Atoi(strings.TrimSpace(parts[1]))
+	return nodeIdx, duration, nil
+}
+
 func main() {
 	fmt.Println("Starting the application...")
 	reader := bufio.NewReader(os.Stdin)
@@ -117,6 +129,20 @@ func main() {
 			channel <- base.Message{Key: key, Command: config.REQ_WRITE, Data: value}
 
 			ListenPutReply(key, value, client_ch)
+		
+		} else if strings.HasPrefix(input, "kill(") && strings.HasSuffix(input, ")") {
+			nodeIdx, duration, err := ParseKillCommand(input)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+
+			newAliveSince := time.Now().Add(time.Millisecond * time.Duration(duration))
+			phy_nodes[nodeIdx].SetAliveSince(newAliveSince)
+			if config.DEBUG_LEVEL >= 1 {
+				fmt.Printf("%v\n", time.Now())
+				fmt.Printf("%v\n", phy_nodes[nodeIdx].GetAliveSince())
+			}
 
 		} else if input == "exit" {
 			close(close_ch)
