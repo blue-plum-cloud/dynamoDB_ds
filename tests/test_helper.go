@@ -3,6 +3,7 @@ package tests
 import (
 	"base"
 	"fmt"
+	"math/rand"
 	"sync"
 	"testing"
 )
@@ -54,10 +55,10 @@ func TestSinglePutSingleGet(t *testing.T) {
 			expected := "value"
 
 			node := base.FindNode(key, phy_nodes)
-
-			node.Put(key, expected)
-			node.Put("u bad", "u good")
-			node.Put("this is", "da bomb")
+			args := []int{0, 0, 0} //change this to global config
+			node.Put(key, expected, args)
+			node.Put("u bad", "u good", args)
+			node.Put("this is", "da bomb", args)
 
 			actual := node.Get(key).GetData()
 
@@ -68,4 +69,17 @@ func TestSinglePutSingleGet(t *testing.T) {
 			close(close_ch)
 		})
 	}
+}
+
+// generateRandomString generates a random string (min 1 char) with maximum
+// length defined by maxN
+func generateRandomString(maxN int) string {
+	letterRunes := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	n := 1 + rand.Intn(maxN)
+
+	res := make([]rune, n)
+	for i := range res {
+		res[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(res)
 }
