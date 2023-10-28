@@ -39,10 +39,9 @@ type Node struct {
 	client_ch chan Message //communicates with "frontend" client
 	tokens    []*Token
 	data      map[string]*Object // key-value data store
-	backup    map[string]*Object // backup of key-value data stores
+	backup    map[*Node](map[string]*Object) // backup of key-value data stores
 	close_ch  chan struct{}      //to close go channels properly
 
-	backupTokens []*Token
 	tokenStruct BST
 	aliveSince time.Time
 }

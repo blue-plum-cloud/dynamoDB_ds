@@ -7,6 +7,19 @@ import (
 	"time"
 )
 
+
+func (n *Node) restoreHandoff() {
+	// transfer back data if dead node recovers
+	for tarNode, nodeBackup := range n.backup {
+		if time.Since(tarNode.GetAliveSince()) > 0 {
+			for k, v := range nodeBackup {
+				tarNode.data[k] = v
+			}
+			delete(n.backup, tarNode)
+		}
+	}
+}
+
 func (n *Node) Start(wg *sync.WaitGroup) {
 	defer wg.Done()
 	for {
@@ -26,6 +39,7 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 			}
 		}
 
+		n.restoreHandoff()
 	}
 }
 
@@ -79,8 +93,7 @@ func updateTreeNode(tokenStruct BST, curTreeNode *TreeNode, visitedNodes map[int
 		token := getHintedHandoffToken(tokenStruct, curTreeNode, visitedNodes, replicationCount)
 		node := token.phy_node
 		
-		node.backup[hashKey] = obj
-		node.backupTokens = append(node.backupTokens, token)
+		node.backup[curToken.phy_node][hashKey] = obj
 		visitedNodes[node.GetID()] = struct{}{}
 		
 		if config.DEBUG_LEVEL >= 2 {
@@ -162,14 +175,15 @@ func (n *Node) Get(key string) *Object {
 		return obj
 	} 
 	
-	obj, exists = n.backup[hashKey]
-	if exists {
-		return obj
-	} else {
-		newObj := Object{}
-		return &newObj
+	for _, nodeBackup := range n.backup {
+		obj, exists = nodeBackup[hashKey]
+		if exists {
+			return obj
+		}
 	}
-
+	
+	newObj := Object{}
+	return &newObj
 }
 
 func CreateNodes(client_ch chan Message, close_ch chan struct{}, numNodes int) []*Node {
