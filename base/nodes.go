@@ -59,8 +59,11 @@ func (n *Node) Put(key string, value string) {
 	// Replication process
 	curTreeNode := n.tokenStruct.Search(hashKey)
 	initToken := curTreeNode.Token
-	visitedNodes := make(map[int]struct{}) // To keep track of unique physical nodes
+	visitedNodes := make(map[int]struct{})  // To keep track of unique physical nodes
+	visitedTokens := make(map[int]struct{}) // To keep track of unique virtual nodes
+
 	visitedNodes[initToken.phy_node.GetID()] = struct{}{}
+	visitedTokens[initToken.GetID()] = struct{}{}
 
 	replicationCount := config.N
 
@@ -82,6 +85,7 @@ func (n *Node) Put(key string, value string) {
 			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
 			curToken.phy_node.data[hashKey] = &newObj
 			visitedNodes[curToken.phy_node.GetID()] = struct{}{}
+			visitedTokens[curToken.GetID()] = struct{}{}
 		}
 
 	}
@@ -91,10 +95,11 @@ func (n *Node) Put(key string, value string) {
 	for res > 0 {
 		curTreeNode = n.tokenStruct.getNext(curTreeNode)
 		curToken := curTreeNode.Token
-		if _, visited := visitedNodes[curToken.phy_node.GetID()]; !visited {
+		if _, visited := visitedTokens[curToken.GetID()]; !visited {
 			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
 			curToken.phy_node.data[hashKey] = &newObj
 			visitedNodes[curToken.phy_node.GetID()] = struct{}{}
+			visitedTokens[curToken.GetID()] = struct{}{}
 			res--
 		}
 	}
