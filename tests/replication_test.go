@@ -34,7 +34,9 @@ func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
 
 			node := base.FindNode("Sudipta", phy_nodes)
 
-			node.Put(key, value, tt.nValue)
+			args := []int{tt.nValue, tt.numNodes, tt.numTokens}
+
+			node.Put(key, value, args)
 			ori := 0
 			repCnt := 0
 			for _, n := range phy_nodes {
@@ -86,7 +88,8 @@ func TestSinglePutReplicationZeroNegative(t *testing.T) {
 
 			node := base.FindNode("Sudipta", phy_nodes)
 
-			node.Put(key, value, tt.nValue)
+			args := []int{tt.nValue, tt.numNodes, tt.numTokens}
+			node.Put(key, value, args)
 			ori := 0
 			repCnt := 0
 			for _, n := range phy_nodes {
@@ -138,7 +141,8 @@ func TestMultipleUniquePutReplication(t *testing.T) {
 				key := keyValuePairs[i][0]
 				value := keyValuePairs[i][1]
 				node := base.FindNode(key, phy_nodes)
-				node.Put(key, value, tt.nValue)
+				args := []int{tt.nValue, tt.numNodes, tt.numTokens}
+				node.Put(key, value, args)
 			}
 
 			// Check replications of all key value pairs

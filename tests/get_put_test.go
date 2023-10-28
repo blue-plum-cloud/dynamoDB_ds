@@ -36,8 +36,8 @@ func TestSimplePutGet(t *testing.T) {
 	expected := "value"
 
 	node := base.FindNode(key, phy_nodes)
-
-	node.Put(key, expected)
+	args := []int{0, 0, 0} //change this to global config
+	node.Put(key, expected, args)
 
 	actual := node.Get(key).GetData()
 
@@ -57,11 +57,12 @@ func TestMultiplePutSingleGet(t *testing.T) {
 	node := base.FindNode(key, phy_nodes)
 
 	// Find the coordinator node responsible for storing the data
-	node.Put(key, expected)
+	args := []int{0, 0, 0} // change this to global config
+	node.Put(key, expected, args)
 	node1 := base.FindNode("u bad", phy_nodes)
-	node1.Put("u bad", "u good")
+	node1.Put("u bad", "u good", args)
 	node2 := base.FindNode("this is", phy_nodes)
-	node2.Put("this is", "da bomb")
+	node2.Put("this is", "da bomb", args)
 
 	actual := node.Get(key).GetData()
 

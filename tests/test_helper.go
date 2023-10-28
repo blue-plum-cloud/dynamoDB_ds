@@ -55,10 +55,10 @@ func TestSinglePutSingleGet(t *testing.T) {
 			expected := "value"
 
 			node := base.FindNode(key, phy_nodes)
-
-			node.Put(key, expected)
-			node.Put("u bad", "u good")
-			node.Put("this is", "da bomb")
+			args := []int{0, 0, 0} //change this to global config
+			node.Put(key, expected, args)
+			node.Put("u bad", "u good", args)
+			node.Put("this is", "da bomb", args)
 
 			actual := node.Get(key).GetData()
 

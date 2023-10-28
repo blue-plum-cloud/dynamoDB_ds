@@ -19,7 +19,8 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 				obj := n.Get(msg.Key)
 				n.client_ch <- Message{Data: obj.GetData(), Command: config.ACK, Key: msg.Key}
 			} else if msg.Command == config.REQ_WRITE {
-				n.Put(msg.Key, msg.Data)
+				args := []int{0, 0, 0} //change this to global config
+				n.Put(msg.Key, msg.Data, args)
 				n.client_ch <- Message{Command: config.ACK, Key: msg.Key}
 			}
 		}
@@ -45,7 +46,7 @@ func (n *Node) GetChannel() chan Message {
 }
 
 // internal function
-func (n *Node) Put(key string, value string, nValue ...int) {
+func (n *Node) Put(key string, value string, nValue []int) {
 	hashKey := computeMD5(key)
 	n.increment_vclk()
 	copy_vclk := n.copy_vclk()
@@ -69,7 +70,17 @@ func (n *Node) Put(key string, value string, nValue ...int) {
 	if len(nValue) == 0 {
 		replicationCount = config.N
 	} else {
-		replicationCount = nValue[0]
+		if nValue[0] >= 0 {
+			replicationCount = nValue[1]
+			if nValue[2] < nValue[1] {
+				replicationCount = nValue[2]
+			}
+			if nValue[0] < replicationCount {
+				replicationCount = nValue[0]
+			}
+		} else {
+			replicationCount = 0
+		}
 	}
 
 	for len(visitedNodes) < replicationCount {
