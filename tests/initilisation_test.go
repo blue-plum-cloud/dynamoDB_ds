@@ -171,3 +171,57 @@ func TestInitilisationZeroNodes(t *testing.T) {
 		})
 	}
 }
+
+// TestInitilisationNegativeNodes tests if no nodes are returned during creation
+// when number of nodes is negative
+func TestInitilisationNegativeNodes(t *testing.T) {
+	var tests = []struct {
+		numNodes, numTokens int
+	}{
+		{-2, 0},
+		{-10, 9},
+		{-100, 10},
+	}
+	for _, tt := range tests {
+		testname := fmt.Sprintf("%d_nodes_%d_tokens", tt.numNodes, tt.numTokens)
+		t.Run(testname, func(t *testing.T) {
+			phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
+
+			if len(phy_nodes) != 0 {
+				t.Errorf("got: %d, expected 0 phy_nodes\n", len(phy_nodes))
+			}
+
+			close(close_ch)
+		})
+	}
+}
+
+// TestInitilisationNegativeTokens tests if nodes are assigned 0 tokens
+// when numTokens is negative
+func TestInitilisationNegativeTokens(t *testing.T) {
+	var tests = []struct {
+		numNodes, numTokens int
+	}{
+		{0, -2},
+		{2, -9},
+		{10, -10},
+		{99, -101},
+	}
+	for _, tt := range tests {
+		testname := fmt.Sprintf("%d_nodes_%d_tokens", tt.numNodes, tt.numTokens)
+		t.Run(testname, func(t *testing.T) {
+			phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
+
+			// Check nodes < i get 1 token and nodes >= i get no tokens
+			for _, node := range phy_nodes {
+				numTokens := len(node.GetTokens())
+				expectedTokens := 0
+				if numTokens != expectedTokens {
+					t.Errorf("got: %d, expected %d tokens for node %d\n", numTokens, expectedTokens, node.GetID())
+				}
+			}
+
+			close(close_ch)
+		})
+	}
+}
