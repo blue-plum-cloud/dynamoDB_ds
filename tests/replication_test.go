@@ -45,7 +45,7 @@ func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
 				}
 			}
 			expectedRepFactor := tt.nValue - 1
-			if tt.nValue-1 > tt.numNodes {
+			if tt.nValue > tt.numNodes {
 				expectedRepFactor = tt.numNodes - 1
 			}
 			if repCnt != expectedRepFactor {
