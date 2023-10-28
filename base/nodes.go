@@ -45,7 +45,7 @@ func (n *Node) GetChannel() chan Message {
 }
 
 // internal function
-func (n *Node) Put(key string, value string) {
+func (n *Node) Put(key string, value string, nValue ...int) {
 	hashKey := computeMD5(key)
 	n.increment_vclk()
 	copy_vclk := n.copy_vclk()
@@ -62,7 +62,12 @@ func (n *Node) Put(key string, value string) {
 	visitedNodes := make(map[int]struct{}) // To keep track of unique physical nodes
 	visitedNodes[initToken.phy_node.GetID()] = struct{}{}
 
-	replicationCount := config.N
+	replicationCount := 0
+	if len(nValue) == 0 {
+		replicationCount = config.N
+	} else {
+		replicationCount = nValue[0]
+	}
 
 	for len(visitedNodes) < replicationCount {
 		fmt.Printf("Cur node = %d\n", curTreeNode.Token.GetID())
