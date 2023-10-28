@@ -33,7 +33,7 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 				obj := n.Get(msg.Key)
 				n.client_ch <- Message{Data: obj.GetData(), Command: config.ACK, Key: msg.Key}
 			} else if msg.Command == config.REQ_WRITE {
-				args := []int{0, 0, 0} //change this to global config
+				args := []int{config.NUM_NODES, config.NUM_TOKENS, config.N} //change this to global config
 				n.Put(msg.Key, msg.Data, args)
 				n.client_ch <- Message{Command: config.ACK, Key: msg.Key}
 			}
@@ -93,6 +93,10 @@ func updateTreeNode(tokenStruct BST, curTreeNode *TreeNode, visitedNodes map[int
 		token := getHintedHandoffToken(tokenStruct, curTreeNode, visitedNodes, replicationCount)
 		node := token.phy_node
 		
+		_, exists := node.backup[curToken.phy_node]
+		if !exists {
+			node.backup[curToken.phy_node] = make(map[string]*Object)
+		}
 		node.backup[curToken.phy_node][hashKey] = obj
 		visitedNodes[node.GetID()] = struct{}{}
 		
@@ -198,6 +202,7 @@ func CreateNodes(client_ch chan Message, close_ch chan struct{}, numNodes int) [
 			v_clk:       make([]int, numNodes),
 			rcv_ch:      make(chan Message, numNodes),
 			data:        make(map[string]*Object),
+			backup:      make(map[*Node](map[string]*Object)),
 			tokenStruct: BST{},
 			client_ch:   client_ch,
 			close_ch:    close_ch,
