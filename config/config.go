@@ -7,6 +7,7 @@ const (
 	REQ_READ  = 0
 	REQ_WRITE = 1
 	ACK       = 2
+	REQ_KILL  = 3
 
 	N = 3 // number of put replication
 
