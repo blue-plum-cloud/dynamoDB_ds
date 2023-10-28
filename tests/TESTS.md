@@ -14,3 +14,5 @@ I1. Ensure that tokens are allocated correctly to the nodes
 - Tokens < Nodes
 - Nodes == 0
 - Tokens == 0
+- Nodes < 0
+- Tokens < 0
