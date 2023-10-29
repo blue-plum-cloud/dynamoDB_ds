@@ -37,15 +37,18 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 				// Get or create the counter for the key
 				counter, exists := repCounters[msg.Key]
 				if !exists {
-					counter = NewCounter(config.N)
+					// fmt.Printf("this is rep cnt = %d\n", msg.repCnt)
+					counter = NewCounter(msg.repCnt)
 					repCounters[msg.Key] = counter
 				}
 
 				counter.Increment()
 				// Increment the count, if count == target remove key and notify client
-				fmt.Print(counter.GetCount())
+				// fmt.Print(counter.GetCount())
 				if counter.Check() {
+					fmt.Println("dbug here1")
 					n.client_ch <- Message{Command: config.ACK, Key: msg.oriKey, SrcID: n.GetID()}
+
 					delete(repCounters, msg.Key)
 				}
 				m.Unlock()
@@ -111,7 +114,8 @@ func (n *Node) updateTreeNode(curTreeNode *TreeNode, visitedNodes map[int]struct
 		n.awaitAck[curToken.phy_id] = new(atomic.Bool)
 	}
 	n.awaitAck[curToken.phy_id].Store(true)
-	n.channels[curToken.phy_id] <- Message{Command: config.SET_DATA, Key: hashKey, ObjData: data, SrcID: n.GetID(), oriKey: oriKey}
+	// fmt.Printf("this is replication count iin update tree node = %d", replicationCount)
+	n.channels[curToken.phy_id] <- Message{Command: config.SET_DATA, Key: hashKey, ObjData: data, SrcID: n.GetID(), oriKey: oriKey, repCnt: replicationCount}
 
 	reqTime := time.Now()
 

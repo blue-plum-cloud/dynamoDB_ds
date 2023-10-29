@@ -10,6 +10,7 @@ import (
 /* To properly define message */
 type Message struct {
 	Command int
+	repCnt  int
 	oriKey  string
 	Key     string
 	Data    string // for client

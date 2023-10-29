@@ -2,8 +2,10 @@ package tests
 
 import (
 	"base"
+	"config"
 	"fmt"
 	"testing"
+	"time"
 )
 
 // TestSinglePutReplicationNonZeroNonNegative checks if replicas are
@@ -25,9 +27,20 @@ func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
 	for _, tt := range tests {
 		testname := fmt.Sprintf("%d_nodes_%d_tokens_%d_n", tt.numNodes, tt.numTokens, tt.nValue)
 		t.Run(testname, func(t *testing.T) {
-			phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
+			// phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
 
-			defer close(close_ch)
+			close_ch := make(chan struct{})
+			client_ch := make(chan base.Message)
+
+			//node and token initialization
+			phy_nodes := base.CreateNodes(client_ch, close_ch, tt.numNodes)
+			base.InitializeTokens(phy_nodes, tt.numTokens)
+			// defer close(close_ch)
+
+			for i := range phy_nodes {
+				wg.Add(1)
+				go phy_nodes[i].Start(&wg)
+			}
 
 			key := "Sudipta"
 			value := "Best Prof"
@@ -36,7 +49,22 @@ func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
 
 			args := []int{tt.nValue, tt.numNodes, tt.numTokens}
 
-			node.Put(key, value, args)
+			go node.Put(key, value, args)
+
+			// time.Sleep(2 * time.Second)
+
+			select {
+			case ack := <-client_ch: // reply received in time
+				if ack.Key != key {
+					panic("wrong key!")
+				}
+
+				fmt.Println("Value stored: ", value, " with key: ", key)
+
+			case <-time.After(config.CLIENT_PUT_TIMEOUT_MS * time.Millisecond): // timeout reached
+				fmt.Println("Put Timeout reached")
+			}
+
 			ori := 0
 			repCnt := 0
 			for _, n := range phy_nodes {
@@ -79,9 +107,20 @@ func TestSinglePutReplicationZeroNegative(t *testing.T) {
 	for _, tt := range tests {
 		testname := fmt.Sprintf("%d_nodes_%d_tokens_%d_n", tt.numNodes, tt.numTokens, tt.nValue)
 		t.Run(testname, func(t *testing.T) {
-			phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
+			// phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
 
-			defer close(close_ch)
+			close_ch := make(chan struct{})
+			client_ch := make(chan base.Message)
+
+			//node and token initialization
+			phy_nodes := base.CreateNodes(client_ch, close_ch, tt.numNodes)
+			base.InitializeTokens(phy_nodes, tt.numTokens)
+			// defer close(close_ch)
+
+			for i := range phy_nodes {
+				wg.Add(1)
+				go phy_nodes[i].Start(&wg)
+			}
 
 			key := "Sudipta"
 			value := "Best Prof"
@@ -89,7 +128,20 @@ func TestSinglePutReplicationZeroNegative(t *testing.T) {
 			node := base.FindNode("Sudipta", phy_nodes)
 
 			args := []int{tt.nValue, tt.numNodes, tt.numTokens}
-			node.Put(key, value, args)
+
+			go node.Put(key, value, args)
+
+			select {
+			case ack := <-client_ch: // reply received in time
+				if ack.Key != key {
+					panic("wrong key!")
+				}
+
+				fmt.Println("Value stored: ", value, " with key: ", key)
+
+			case <-time.After(config.CLIENT_PUT_TIMEOUT_MS * time.Millisecond): // timeout reached
+				fmt.Println("Put Timeout reached")
+			}
 			ori := 0
 			repCnt := 0
 			for _, n := range phy_nodes {
@@ -132,9 +184,20 @@ func TestMultipleUniquePutReplication(t *testing.T) {
 	for _, tt := range tests {
 		testname := fmt.Sprintf("%d_nodes_%d_tokens_%d_n_%d_keyValuePairs", tt.numNodes, tt.numTokens, tt.nValue, tt.numKeyValuePairs)
 		t.Run(testname, func(t *testing.T) {
-			phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
+			// phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
 
-			defer close(close_ch)
+			close_ch := make(chan struct{})
+			client_ch := make(chan base.Message)
+
+			//node and token initialization
+			phy_nodes := base.CreateNodes(client_ch, close_ch, tt.numNodes)
+			base.InitializeTokens(phy_nodes, tt.numTokens)
+			// defer close(close_ch)
+
+			for i := range phy_nodes {
+				wg.Add(1)
+				go phy_nodes[i].Start(&wg)
+			}
 
 			// Put all key value pairs into system
 			for i := 0; i < tt.numKeyValuePairs; i++ {
@@ -142,7 +205,18 @@ func TestMultipleUniquePutReplication(t *testing.T) {
 				value := keyValuePairs[i][1]
 				node := base.FindNode(key, phy_nodes)
 				args := []int{tt.nValue, tt.numNodes, tt.numTokens}
-				node.Put(key, value, args)
+				go node.Put(key, value, args)
+				select {
+				case ack := <-client_ch: // reply received in time
+					if ack.Key != key {
+						panic("wrong key!")
+					}
+
+					fmt.Println("Value stored: ", value, " with key: ", key)
+
+				case <-time.After(config.CLIENT_PUT_TIMEOUT_MS * time.Millisecond): // timeout reached
+					fmt.Println("Put Timeout reached")
+				}
 			}
 
 			// Check replications of all key value pairs
