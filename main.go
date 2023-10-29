@@ -15,7 +15,6 @@ import (
 
 var wg sync.WaitGroup
 
-
 func ParseGetCommand(input string) (string, error) {
 	key := strings.TrimSuffix(strings.TrimPrefix(input, "get("), ")")
 	parts := strings.SplitN(key, ",", 2)
@@ -27,20 +26,20 @@ func ParseGetCommand(input string) (string, error) {
 
 func ListenGetReply(key string, client_ch chan base.Message) {
 	select {
-		case value := <- client_ch: // reply received in time
-			if value.Key != key {
-				panic("wrong key!")
-			}
+	case value := <-client_ch: // reply received in time
+		if value.Key != key {
+			panic("wrong key!")
+		}
 
-			//i'm sure there's a better way here
-			if value.Data != "" {
-				fmt.Println("value is: ", value.Data)
-			} else {
-				fmt.Println("data not found!")
-			}
-		
-		case <- time.After(config.CLIENT_GET_TIMEOUT_MS * time.Millisecond): // timeout reached
-			fmt.Println("Get Timeout reached")
+		//i'm sure there's a better way here
+		if value.Data != "" {
+			fmt.Println("value is: ", value.Data)
+		} else {
+			fmt.Println("data not found!")
+		}
+
+	case <-time.After(config.CLIENT_GET_TIMEOUT_MS * time.Millisecond): // timeout reached
+		fmt.Println("Get Timeout reached")
 	}
 }
 
@@ -57,15 +56,15 @@ func ParsePutCommand(input string) (string, string, error) {
 
 func ListenPutReply(key string, value string, client_ch chan base.Message) {
 	select {
-		case ack := <- client_ch: // reply received in time
-			if ack.Key != key {
-				panic("wrong key!")
-			}
+	case ack := <-client_ch: // reply received in time
+		if ack.Key != key {
+			panic("wrong key!")
+		}
 
-			fmt.Println("Value stored: ", value, " with key: ", key)
-		
-		case <- time.After(config.CLIENT_PUT_TIMEOUT_MS * time.Millisecond): // timeout reached
-			fmt.Println("Put Timeout reached")
+		fmt.Println("Value stored: ", value, " with key: ", key)
+
+	case <-time.After(config.CLIENT_PUT_TIMEOUT_MS * time.Millisecond): // timeout reached
+		fmt.Println("Put Timeout reached")
 	}
 }
 
@@ -110,7 +109,7 @@ func main() {
 				fmt.Println(err)
 				continue
 			}
-			
+
 			node := base.FindNode(key, phy_nodes)
 			channel := (*node).GetChannel()
 			channel <- base.Message{Key: key, Command: config.REQ_READ}
@@ -129,7 +128,7 @@ func main() {
 			channel <- base.Message{Key: key, Command: config.REQ_WRITE, Data: value}
 
 			ListenPutReply(key, value, client_ch)
-		
+
 		} else if strings.HasPrefix(input, "kill(") && strings.HasSuffix(input, ")") {
 			nodeIdx, duration, err := ParseKillCommand(input)
 			if err != nil {

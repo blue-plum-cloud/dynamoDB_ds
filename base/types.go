@@ -10,10 +10,11 @@ import (
 /* To properly define message */
 type Message struct {
 	Command int
+	oriKey  string
 	Key     string
-	Data    string	 // for client
+	Data    string // for client
 
-	SrcID   int 	 // for inter-node
+	SrcID   int     // for inter-node
 	ObjData *Object // for inter-node
 }
 
@@ -43,7 +44,7 @@ func (o *Object) IsReplica() bool {
 	return o.isReplica
 }
 
-func (o *Object) Copy() Object{
+func (o *Object) Copy() Object {
 	return Object{context: o.context.Copy(), data: o.data, isReplica: o.isReplica}
 }
 
@@ -58,13 +59,13 @@ type Node struct {
 	rcv_ch    chan Message
 	client_ch chan Message //communicates with "frontend" client
 	tokens    []*Token
-	data      map[string]*Object // key-value data store
+	data      map[string]*Object           // key-value data store
 	backup    map[int](map[string]*Object) // backup of key-value data stores
-	close_ch  chan struct{}      //to close go channels properly
+	close_ch  chan struct{}                //to close go channels properly
 
-	awaitAck  map[int](*atomic.Bool)	// flags to check on timeout routines
+	awaitAck    map[int](*atomic.Bool) // flags to check on timeout routines
 	tokenStruct BST
-	aliveSince time.Time
+	aliveSince  time.Time
 }
 
 func (n *Node) GetTokens() []*Token {
@@ -142,7 +143,7 @@ func (bst *BST) Search(value string) *TreeNode {
 
 func (bst *BST) searchTok(root *TreeNode, value string) *TreeNode {
 	if config.DEBUG_LEVEL >= 3 {
-		fmt.Printf("token %d, range start = %s, range end = %s, value = %s\n", 
+		fmt.Printf("token %d, range start = %s, range end = %s, value = %s\n",
 			root.Token.id, root.Token.range_start, root.Token.range_end, value)
 	}
 
@@ -202,4 +203,28 @@ func (bst *BST) PrintBST() {
 		fmt.Printf("%v\n", node.Token)
 		node = bst.getNext(node)
 	}
+}
+
+type Counter struct {
+	Count  int
+	Target int
+}
+
+func NewCounter(target int) *Counter {
+	return &Counter{
+		Count:  0,
+		Target: target,
+	}
+}
+
+func (i *Counter) Increment() {
+	i.Count++
+}
+
+func (i *Counter) Check() bool {
+	return i.Count == i.Target
+}
+
+func (i *Counter) GetCount() int {
+	return i.Count
 }

@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+var m sync.Mutex
+var repCounters = make(map[string]*Counter)
 
 func (n *Node) Start(wg *sync.WaitGroup) {
 	defer wg.Done()
@@ -22,13 +24,32 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 				obj := n.Get(msg.Key)
 				n.client_ch <- Message{Command: config.ACK, Key: msg.Key, Data: obj.GetData(), SrcID: n.GetID()}
 			} else if msg.Command == config.REQ_WRITE {
-				args := []int{config.NUM_NODES, config.NUM_TOKENS, config.N} //change this to global config
+				args := []int{config.N, config.NUM_NODES, config.NUM_TOKENS} //change this to global config
 				go n.Put(msg.Key, msg.Data, args)
-				n.client_ch <- Message{Command: config.ACK, Key: msg.Key, SrcID: n.GetID()}
+
+				// n.client_ch <- Message{Command: config.ACK, Key: msg.Key, SrcID: n.GetID()}
 			} else if msg.Command == config.SET_DATA {
 				if config.DEBUG_LEVEL >= 1 {
 					fmt.Printf("Start: %d->%d SET_DATA, message info: key=%s, object=(%s)\n", msg.SrcID, n.GetID(), msg.Key, msg.ObjData.ToString())
 				}
+
+				m.Lock()
+				// Get or create the counter for the key
+				counter, exists := repCounters[msg.Key]
+				if !exists {
+					counter = NewCounter(config.N)
+					repCounters[msg.Key] = counter
+				}
+
+				counter.Increment()
+				// Increment the count, if count == target remove key and notify client
+				fmt.Print(counter.GetCount())
+				if counter.Check() {
+					n.client_ch <- Message{Command: config.ACK, Key: msg.oriKey, SrcID: n.GetID()}
+					delete(repCounters, msg.Key)
+				}
+				m.Unlock()
+
 				n.data[msg.Key] = msg.ObjData
 				n.channels[msg.SrcID] <- Message{Command: config.ACK, Key: msg.Key, SrcID: n.GetID()}
 			} else if msg.Command == config.ACK {
@@ -70,7 +91,7 @@ func (n *Node) getHintedHandoffToken(initNode *TreeNode, visitedNodes map[int]st
 
 	for i > 0 {
 		treeNode := n.tokenStruct.getNext(treeNode)
-		
+
 		if treeNode.Token.GetID() == initToken.GetID() {
 			break
 		}
@@ -84,13 +105,13 @@ func (n *Node) getHintedHandoffToken(initNode *TreeNode, visitedNodes map[int]st
 }
 
 /* Send message to update the node with object, on timeout, send message to update backup node with the object */
-func (n *Node) updateTreeNode(curTreeNode *TreeNode, visitedNodes map[int]struct{}, replicationCount int, hashKey string, data *Object) {
+func (n *Node) updateTreeNode(curTreeNode *TreeNode, visitedNodes map[int]struct{}, replicationCount int, hashKey string, oriKey string, data *Object) {
 	curToken := curTreeNode.Token
-	if _, exists := n.awaitAck[curToken.phy_id]; !exists{
+	if _, exists := n.awaitAck[curToken.phy_id]; !exists {
 		n.awaitAck[curToken.phy_id] = new(atomic.Bool)
 	}
 	n.awaitAck[curToken.phy_id].Store(true)
-	n.channels[curToken.phy_id] <- Message{Command: config.SET_DATA, Key: hashKey, ObjData: data, SrcID: n.GetID()}
+	n.channels[curToken.phy_id] <- Message{Command: config.SET_DATA, Key: hashKey, ObjData: data, SrcID: n.GetID(), oriKey: oriKey}
 
 	reqTime := time.Now()
 
@@ -114,7 +135,7 @@ func (n *Node) updateTreeNode(curTreeNode *TreeNode, visitedNodes map[int]struct
 func FindNode(key string, phy_nodes []*Node) *Node {
 	hashkey := computeMD5(key)
 	root := phy_nodes[0]
-	
+
 	// bst_node satisfies hashInRange(value, bst_node.Token.GetStartRange(), bst_node.Token.GetEndRange())
 	bst_node := root.tokenStruct.Search(hashkey)
 	if bst_node == nil {
@@ -128,7 +149,7 @@ func (n *Node) GetChannel() chan Message {
 }
 
 // internal function
-// Pass in global config details (PhysicalNum, VirtualNum, ReplicationNum)
+// Pass in global config details (ReplicationNum, PhysicalNum, VirtualNum)
 func (n *Node) Put(key string, value string, nValue []int) {
 	replicationCount := getReplicationCount(nValue)
 
@@ -141,11 +162,11 @@ func (n *Node) Put(key string, value string, nValue []int) {
 	// Replication process
 	curTreeNode := n.tokenStruct.Search(hashKey)
 	initToken := curTreeNode.Token
-	visitedNodes := make(map[int]struct{})  // To keep track of unique physical nodes. Use map as set. Use struct{} to occupy 0 space
-	
+	visitedNodes := make(map[int]struct{}) // To keep track of unique physical nodes. Use map as set. Use struct{} to occupy 0 space
+
 	// Coordinator copy
 	newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
-	n.updateTreeNode(curTreeNode, visitedNodes, replicationCount, hashKey, &newObj)
+	n.updateTreeNode(curTreeNode, visitedNodes, replicationCount, hashKey, key, &newObj)
 
 	for len(visitedNodes) < replicationCount {
 		nextTreeNode := n.tokenStruct.getNext(curTreeNode)
@@ -159,7 +180,7 @@ func (n *Node) Put(key string, value string, nValue []int) {
 
 		if _, visited := visitedNodes[curToken.phy_id]; !visited {
 			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
-			n.updateTreeNode(curTreeNode, visitedNodes, replicationCount, hashKey, &newObj)
+			n.updateTreeNode(curTreeNode, visitedNodes, replicationCount, hashKey, key, &newObj)
 		}
 	}
 }
@@ -173,15 +194,15 @@ func (n *Node) Get(key string) *Object {
 	//reconciliation function here
 	if exists {
 		return obj
-	} 
-	
+	}
+
 	for _, nodeBackup := range n.backup {
 		obj, exists = nodeBackup[hashKey]
 		if exists {
 			return obj
 		}
 	}
-	
+
 	newObj := Object{}
 	return &newObj
 }
@@ -196,14 +217,14 @@ func CreateNodes(client_ch chan Message, close_ch chan struct{}, numNodes int) [
 		node := Node{
 			id:          j,
 			v_clk:       make([]int, numNodes),
-			channels:	 make(map[int](chan Message)),
+			channels:    make(map[int](chan Message)),
 			rcv_ch:      make(chan Message, numNodes),
 			data:        make(map[string]*Object),
 			backup:      make(map[int](map[string]*Object)),
 			tokenStruct: BST{},
 			client_ch:   client_ch,
 			close_ch:    close_ch,
-			awaitAck:	 make(map[int](*atomic.Bool)),
+			awaitAck:    make(map[int](*atomic.Bool)),
 		}
 
 		nodeGroup = append(nodeGroup, &node)

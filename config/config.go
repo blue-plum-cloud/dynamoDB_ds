@@ -14,7 +14,7 @@ const (
 
 	CLIENT_GET_TIMEOUT_MS = 2000
 	CLIENT_PUT_TIMEOUT_MS = 2000
-	SET_DATA_TIMEOUT_NS = 1000000000 // 1 second
+	SET_DATA_TIMEOUT_NS   = 1000000000 // 1 second
 
 	// 1 - key info
 	// 2 - verbose, fixed random seed
