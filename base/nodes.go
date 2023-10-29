@@ -46,7 +46,6 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 				// Increment the count, if count == target remove key and notify client
 				// fmt.Print(counter.GetCount())
 				if counter.Check() {
-					fmt.Println("dbug here1")
 					n.client_ch <- Message{Command: config.ACK, Key: msg.oriKey, SrcID: n.GetID()}
 
 					delete(repCounters, msg.Key)
