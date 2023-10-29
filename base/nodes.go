@@ -4,7 +4,21 @@ import (
 	"config"
 	"fmt"
 	"sync"
+	"time"
 )
+
+
+func (n *Node) restoreHandoff() {
+	// transfer back data if dead node recovers
+	for tarNode, nodeBackup := range n.backup {
+		if time.Since(tarNode.GetAliveSince()) > 0 {
+			for k, v := range nodeBackup {
+				tarNode.data[k] = v
+			}
+			delete(n.backup, tarNode)
+		}
+	}
+}
 
 func (n *Node) Start(wg *sync.WaitGroup) {
 	defer wg.Done()
@@ -19,12 +33,84 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 				obj := n.Get(msg.Key)
 				n.client_ch <- Message{Data: obj.GetData(), Command: config.ACK, Key: msg.Key}
 			} else if msg.Command == config.REQ_WRITE {
-				args := []int{0, 0, 0} //change this to global config
+				args := []int{config.NUM_NODES, config.NUM_TOKENS, config.N} //change this to global config
 				n.Put(msg.Key, msg.Data, args)
 				n.client_ch <- Message{Command: config.ACK, Key: msg.Key}
 			}
 		}
 
+		n.restoreHandoff()
+	}
+}
+
+/* Get Replication count for testing */
+func getReplicationCount(nValue []int) int {
+	replicationCount := 0
+	if len(nValue) == 0 {
+		replicationCount = config.N
+	} else {
+		if nValue[0] >= 0 {
+			replicationCount = nValue[1]
+			if nValue[2] < nValue[1] {
+				replicationCount = nValue[2]
+			}
+			if nValue[0] < replicationCount {
+				replicationCount = nValue[0]
+			}
+		} else {
+			replicationCount = 0
+		}
+	}
+	return replicationCount
+}
+
+/* Finds N+1-th available physical node from current node */
+func getHintedHandoffToken(tokenStruct BST, initNode *TreeNode, visitedNodes map[int]struct{}, replicationCount int) *Token {
+	i := replicationCount
+	treeNode := initNode
+	initToken := initNode.Token
+
+	for i > 0 {
+		treeNode := tokenStruct.getNext(treeNode)
+		
+		if treeNode.Token.GetID() == initToken.GetID() {
+			break
+		}
+
+		if _, visited := visitedNodes[treeNode.Token.phy_node.GetID()]; !visited {
+			i -= 1
+		}
+	}
+
+	return treeNode.Token
+}
+
+/* Update the node with the object */
+func updateTreeNode(tokenStruct BST, curTreeNode *TreeNode, visitedNodes map[int]struct{}, replicationCount int, hashKey string, obj *Object) {
+	curToken := curTreeNode.Token
+	if time.Since(curToken.phy_node.GetAliveSince()) < 0 {
+		// Hinted handoff to N+1-th physical node from current node
+		token := getHintedHandoffToken(tokenStruct, curTreeNode, visitedNodes, replicationCount)
+		node := token.phy_node
+		
+		_, exists := node.backup[curToken.phy_node]
+		if !exists {
+			node.backup[curToken.phy_node] = make(map[string]*Object)
+		}
+		node.backup[curToken.phy_node][hashKey] = obj
+		visitedNodes[node.GetID()] = struct{}{}
+		
+		if config.DEBUG_LEVEL >= 2 {
+			fmt.Printf("Handoff to token=%d, node=%d\n", token.GetID(), node.GetID())
+		}
+
+	} else {
+		// Replicate data to the physical node of this token
+		curToken.phy_node.data[hashKey] = obj
+		visitedNodes[curToken.phy_node.GetID()] = struct{}{}
+		if config.DEBUG_LEVEL >= 2 {
+			fmt.Printf("Replicated to token=%d, node=%d\n", curToken.GetID(), curToken.phy_node.GetID())
+		}
 	}
 }
 
@@ -48,39 +134,22 @@ func (n *Node) GetChannel() chan Message {
 // internal function
 // Pass in global config details (PhysicalNum, VirtualNum, ReplicationNum)
 func (n *Node) Put(key string, value string, nValue []int) {
+	replicationCount := getReplicationCount(nValue)
+
 	hashKey := computeMD5(key)
 	n.increment_vclk()
 	copy_vclk := n.copy_vclk()
-	//create object and context from current node's state
-	newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
-	n.data[hashKey] = &newObj
 
 	fmt.Printf("Coordinator node = %d, responsible for hashkey = %032X\n", n.GetID(), hashKey)
 
 	// Replication process
 	curTreeNode := n.tokenStruct.Search(hashKey)
 	initToken := curTreeNode.Token
-
-	// Use map for set implementation in golang. Use struct{} instead of bool to occupy 0 space
-	visitedNodes := make(map[int]struct{})  // To keep track of unique physical nodes
-	visitedNodes[initToken.phy_node.GetID()] = struct{}{}
-
-	replicationCount := 0
-	if len(nValue) == 0 {
-		replicationCount = config.N
-	} else {
-		if nValue[0] >= 0 {
-			replicationCount = nValue[1]
-			if nValue[2] < nValue[1] {
-				replicationCount = nValue[2]
-			}
-			if nValue[0] < replicationCount {
-				replicationCount = nValue[0]
-			}
-		} else {
-			replicationCount = 0
-		}
-	}
+	visitedNodes := make(map[int]struct{})  // To keep track of unique physical nodes. Use map as set. Use struct{} to occupy 0 space
+	
+	// Coordinator copy
+	newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
+	updateTreeNode(n.tokenStruct, curTreeNode, visitedNodes, replicationCount, hashKey, &newObj)
 
 	for len(visitedNodes) < replicationCount {
 		nextTreeNode := n.tokenStruct.getNext(curTreeNode)
@@ -93,13 +162,8 @@ func (n *Node) Put(key string, value string, nValue []int) {
 		}
 
 		if _, visited := visitedNodes[curToken.phy_node.GetID()]; !visited {
-			// Replicate data to the physical node of this token
-			if config.DEBUG_LEVEL >= 2 {
-				fmt.Printf("Replicated to token=%d, node=%d\n", curToken.GetID(), curToken.phy_node.GetID())
-			}
 			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
-			curToken.phy_node.data[hashKey] = &newObj
-			visitedNodes[curToken.phy_node.GetID()] = struct{}{}
+			updateTreeNode(n.tokenStruct, curTreeNode, visitedNodes, replicationCount, hashKey, &newObj)
 		}
 	}
 }
@@ -113,11 +177,17 @@ func (n *Node) Get(key string) *Object {
 	//reconciliation function here
 	if exists {
 		return obj
-	} else {
-		newObj := Object{}
-		return &newObj
+	} 
+	
+	for _, nodeBackup := range n.backup {
+		obj, exists = nodeBackup[hashKey]
+		if exists {
+			return obj
+		}
 	}
-
+	
+	newObj := Object{}
+	return &newObj
 }
 
 func CreateNodes(client_ch chan Message, close_ch chan struct{}, numNodes int) []*Node {
@@ -132,6 +202,7 @@ func CreateNodes(client_ch chan Message, close_ch chan struct{}, numNodes int) [
 			v_clk:       make([]int, numNodes),
 			rcv_ch:      make(chan Message, numNodes),
 			data:        make(map[string]*Object),
+			backup:      make(map[*Node](map[string]*Object)),
 			tokenStruct: BST{},
 			client_ch:   client_ch,
 			close_ch:    close_ch,
