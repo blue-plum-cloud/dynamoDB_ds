@@ -4,21 +4,10 @@ import (
 	"config"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
-
-func (n *Node) restoreHandoff() {
-	// transfer back data if dead node recovers
-	for tarNode, nodeBackup := range n.backup {
-		if time.Since(tarNode.GetAliveSince()) > 0 {
-			for k, v := range nodeBackup {
-				tarNode.data[k] = v
-			}
-			delete(n.backup, tarNode)
-		}
-	}
-}
 
 func (n *Node) Start(wg *sync.WaitGroup) {
 	defer wg.Done()
@@ -31,15 +20,24 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 		case msg := <-n.rcv_ch:
 			if msg.Command == config.REQ_READ {
 				obj := n.Get(msg.Key)
-				n.client_ch <- Message{Data: obj.GetData(), Command: config.ACK, Key: msg.Key}
+				n.client_ch <- Message{Command: config.ACK, Key: msg.Key, Data: obj.GetData(), SrcID: n.GetID()}
 			} else if msg.Command == config.REQ_WRITE {
 				args := []int{config.NUM_NODES, config.NUM_TOKENS, config.N} //change this to global config
-				n.Put(msg.Key, msg.Data, args)
-				n.client_ch <- Message{Command: config.ACK, Key: msg.Key}
+				go n.Put(msg.Key, msg.Data, args)
+				n.client_ch <- Message{Command: config.ACK, Key: msg.Key, SrcID: n.GetID()}
+			} else if msg.Command == config.SET_DATA {
+				if config.DEBUG_LEVEL >= 1 {
+					fmt.Printf("Start: %d->%d SET_DATA, message info: key=%s, object=(%s)\n", msg.SrcID, n.GetID(), msg.Key, msg.ObjData.ToString())
+				}
+				n.data[msg.Key] = msg.ObjData
+				n.channels[msg.SrcID] <- Message{Command: config.ACK, Key: msg.Key, SrcID: n.GetID()}
+			} else if msg.Command == config.ACK {
+				if config.DEBUG_LEVEL >= 1 {
+					fmt.Printf("Start: %d->%d ACK received\n", msg.SrcID, n.GetID())
+				}
+				n.awaitAck[msg.SrcID].Store(false)
 			}
 		}
-
-		n.restoreHandoff()
 	}
 }
 
@@ -65,19 +63,19 @@ func getReplicationCount(nValue []int) int {
 }
 
 /* Finds N+1-th available physical node from current node */
-func getHintedHandoffToken(tokenStruct BST, initNode *TreeNode, visitedNodes map[int]struct{}, replicationCount int) *Token {
+func (n *Node) getHintedHandoffToken(initNode *TreeNode, visitedNodes map[int]struct{}, replicationCount int) *Token {
 	i := replicationCount
 	treeNode := initNode
 	initToken := initNode.Token
 
 	for i > 0 {
-		treeNode := tokenStruct.getNext(treeNode)
+		treeNode := n.tokenStruct.getNext(treeNode)
 		
 		if treeNode.Token.GetID() == initToken.GetID() {
 			break
 		}
 
-		if _, visited := visitedNodes[treeNode.Token.phy_node.GetID()]; !visited {
+		if _, visited := visitedNodes[treeNode.Token.phy_id]; !visited {
 			i -= 1
 		}
 	}
@@ -85,36 +83,34 @@ func getHintedHandoffToken(tokenStruct BST, initNode *TreeNode, visitedNodes map
 	return treeNode.Token
 }
 
-/* Update the node with the object */
-func updateTreeNode(tokenStruct BST, curTreeNode *TreeNode, visitedNodes map[int]struct{}, replicationCount int, hashKey string, obj *Object) {
+/* Send message to update the node with object, on timeout, send message to update backup node with the object */
+func (n *Node) updateTreeNode(curTreeNode *TreeNode, visitedNodes map[int]struct{}, replicationCount int, hashKey string, data *Object) {
 	curToken := curTreeNode.Token
-	if time.Since(curToken.phy_node.GetAliveSince()) < 0 {
-		// Hinted handoff to N+1-th physical node from current node
-		token := getHintedHandoffToken(tokenStruct, curTreeNode, visitedNodes, replicationCount)
-		node := token.phy_node
-		
-		_, exists := node.backup[curToken.phy_node]
-		if !exists {
-			node.backup[curToken.phy_node] = make(map[string]*Object)
-		}
-		node.backup[curToken.phy_node][hashKey] = obj
-		visitedNodes[node.GetID()] = struct{}{}
-		
-		if config.DEBUG_LEVEL >= 2 {
-			fmt.Printf("Handoff to token=%d, node=%d\n", token.GetID(), node.GetID())
-		}
+	if _, exists := n.awaitAck[curToken.phy_id]; !exists{
+		n.awaitAck[curToken.phy_id] = new(atomic.Bool)
+	}
+	n.awaitAck[curToken.phy_id].Store(true)
+	n.channels[curToken.phy_id] <- Message{Command: config.SET_DATA, Key: hashKey, ObjData: data, SrcID: n.GetID()}
 
-	} else {
-		// Replicate data to the physical node of this token
-		curToken.phy_node.data[hashKey] = obj
-		visitedNodes[curToken.phy_node.GetID()] = struct{}{}
-		if config.DEBUG_LEVEL >= 2 {
-			fmt.Printf("Replicated to token=%d, node=%d\n", curToken.GetID(), curToken.phy_node.GetID())
+	reqTime := time.Now()
+
+	for {
+		if !(n.awaitAck[curToken.phy_id].Load()) {
+			visitedNodes[curToken.phy_id] = struct{}{}
+			if config.DEBUG_LEVEL >= 2 {
+				fmt.Printf("Replicated to token=%d, node=%d\n", curToken.GetID(), curToken.phy_id)
+			}
+			break
+		}
+		if time.Since(reqTime) > config.SET_DATA_TIMEOUT_NS {
+			fmt.Printf("node %d: update node %d timeout reached.\n", n.GetID(), curToken.phy_id)
+			// TODO: hinted handoff to N+1-th physical node from current node
+			break
 		}
 	}
 }
 
-/* Traverses token BST struc, assumed to be consistent across all nodes */
+/* Traverses token BST struc, assumed to be consistent across nodes 0 and other nodes */
 func FindNode(key string, phy_nodes []*Node) *Node {
 	hashkey := computeMD5(key)
 	root := phy_nodes[0]
@@ -124,7 +120,7 @@ func FindNode(key string, phy_nodes []*Node) *Node {
 	if bst_node == nil {
 		panic("node not found due to key being out of range of all tokens")
 	}
-	return bst_node.Token.phy_node
+	return phy_nodes[bst_node.Token.phy_id]
 }
 
 func (n *Node) GetChannel() chan Message {
@@ -149,7 +145,7 @@ func (n *Node) Put(key string, value string, nValue []int) {
 	
 	// Coordinator copy
 	newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
-	updateTreeNode(n.tokenStruct, curTreeNode, visitedNodes, replicationCount, hashKey, &newObj)
+	n.updateTreeNode(curTreeNode, visitedNodes, replicationCount, hashKey, &newObj)
 
 	for len(visitedNodes) < replicationCount {
 		nextTreeNode := n.tokenStruct.getNext(curTreeNode)
@@ -161,9 +157,9 @@ func (n *Node) Put(key string, value string, nValue []int) {
 			break
 		}
 
-		if _, visited := visitedNodes[curToken.phy_node.GetID()]; !visited {
+		if _, visited := visitedNodes[curToken.phy_id]; !visited {
 			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
-			updateTreeNode(n.tokenStruct, curTreeNode, visitedNodes, replicationCount, hashKey, &newObj)
+			n.updateTreeNode(curTreeNode, visitedNodes, replicationCount, hashKey, &newObj)
 		}
 	}
 }
@@ -200,12 +196,14 @@ func CreateNodes(client_ch chan Message, close_ch chan struct{}, numNodes int) [
 		node := Node{
 			id:          j,
 			v_clk:       make([]int, numNodes),
+			channels:	 make(map[int](chan Message)),
 			rcv_ch:      make(chan Message, numNodes),
 			data:        make(map[string]*Object),
-			backup:      make(map[*Node](map[string]*Object)),
+			backup:      make(map[int](map[string]*Object)),
 			tokenStruct: BST{},
 			client_ch:   client_ch,
 			close_ch:    close_ch,
+			awaitAck:	 make(map[int](*atomic.Bool)),
 		}
 
 		nodeGroup = append(nodeGroup, &node)
@@ -219,7 +217,7 @@ func CreateNodes(client_ch chan Message, close_ch chan struct{}, numNodes int) [
 		for i := 0; i < numNodes; i++ {
 			machine := nodeGroup[i]
 			receive_channel := machine.rcv_ch
-			(*target_machine).channels = append((*target_machine).channels, receive_channel)
+			(*target_machine).channels[machine.GetID()] = receive_channel
 		}
 	}
 	return nodeGroup
