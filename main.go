@@ -81,53 +81,51 @@ func ParseKillCommand(input string) (int, int, error) {
 
 func SetConfigs(c *base.Config, reader *bufio.Reader) {
 	fmt.Println("Start System Configuration")
-	state := 0 //select nodes->tokens->timeouts
-	for {
-		if state == 0 {
-			fmt.Print("Set number of physical nodes: ")
-		} else if state == 1 {
-			fmt.Print("Set number of tokens: ")
-		} else if state == 2 {
-			fmt.Print("Set number of CLIENT_GET_TIMEOUT in milliseconds: ")
-		} else if state == 3 {
-			fmt.Print("Set number of CLIENT_PUT_TIMEOUT in milliseconds:")
-		} else if state == 4 {
-			fmt.Print("Set number of SET_DATA_TIMEOUT in nanoseconds:")
-		}
-		input, _ := reader.ReadString('\n')
-		input = strings.TrimSpace(input)
 
-		// Convert the string input to float
-		value, err := strconv.Atoi(input)
+	prompts := []struct {
+		message      string
+		setter       func(int)
+		defaultValue int
+	}{
+		{fmt.Sprintf("Set number of physical nodes (default: %d): ", config.NUM_NODES), func(val int) { c.NUM_NODES = val }, config.NUM_NODES},
+		{fmt.Sprintf("Set number of tokens (default: %d): ", config.NUM_TOKENS), func(val int) { c.NUM_TOKENS = val }, config.NUM_TOKENS},
+		{fmt.Sprintf("Set number of CLIENT_GET_TIMEOUT in milliseconds (default: %d): ", config.CLIENT_GET_TIMEOUT_MS), func(val int) { c.CLIENT_GET_TIMEOUT_MS = val }, config.CLIENT_GET_TIMEOUT_MS},
+		{fmt.Sprintf("Set number of CLIENT_PUT_TIMEOUT in milliseconds (default: %d): ", config.CLIENT_PUT_TIMEOUT_MS), func(val int) { c.CLIENT_PUT_TIMEOUT_MS = val }, config.CLIENT_PUT_TIMEOUT_MS},
+		{fmt.Sprintf("Set number of SET_DATA_TIMEOUT in nanoseconds (default: %d): ", config.SET_DATA_TIMEOUT_NS), func(val int) { c.SET_DATA_TIMEOUT_NS = val }, config.SET_DATA_TIMEOUT_NS},
+	}
 
-		if err == nil && value > 0 {
-			if state == 0 {
-				fmt.Printf("Number of physical nodes set to %d.\n\n", value)
-				c.NUM_NODES = value
-			} else if state == 1 {
-				fmt.Printf("Number of tokens set to %d.\n\n", value)
-				c.NUM_TOKENS = value
-			} else if state == 2 {
-				fmt.Printf("CLIENT_GET_TIMEOUT_MS set to %d.\n\n", value)
-				c.CLIENT_GET_TIMEOUT_MS = value
-			} else if state == 3 {
-				fmt.Printf("CLIENT_PUT_TIMEOUT_MS set to %d.\n\n", value)
-				c.CLIENT_PUT_TIMEOUT_MS = value
-			} else if state == 4 {
-				fmt.Printf("SET_DATA_TIMEOUT_NS set to %d.\n\n", value)
-				c.SET_DATA_TIMEOUT_NS = value
-			}
-			state++
-			if state == 5 {
+	for _, prompt := range prompts {
+		for {
+			fmt.Print(prompt.message)
+			input, _ := reader.ReadString('\n')
+			input = strings.TrimSpace(input)
+
+			// Empty input uses the default value
+			if input == "" {
+				prompt.setter(prompt.defaultValue)
+				// fmt.Printf("set to default: %d.\n\n", prompt.defaultValue)
 				break
 			}
-		} else {
+
+			// Convert the string input to int
+			value, err := strconv.Atoi(input)
+
+			if err == nil && value > 0 {
+				prompt.setter(value)
+				// fmt.Printf("set to %d.\n\n", value)
+				break
+			}
 
 			fmt.Println("Invalid input. Please enter a positive number.")
 		}
 	}
 
 	fmt.Println("Configuration complete!")
+	printConfig(c)
+	fmt.Println("Starting system...")
+}
+
+func printConfig(c *base.Config) {
 	fmt.Println("----------------------------------------")
 	fmt.Printf("Physical nodes: %d.\n\n", c.NUM_NODES)
 	fmt.Printf("Tokens: %d.\n\n", c.NUM_TOKENS)
@@ -135,8 +133,6 @@ func SetConfigs(c *base.Config, reader *bufio.Reader) {
 	fmt.Printf("CLIENT_PUT_TIMEOUT_MS: %d.\n\n", c.CLIENT_PUT_TIMEOUT_MS)
 	fmt.Printf("SET_DATA_TIMEOUT_NS: %d.\n\n", c.SET_DATA_TIMEOUT_NS)
 	fmt.Println("----------------------------------------")
-	fmt.Println("Starting system...")
-	return
 }
 
 func main() {
