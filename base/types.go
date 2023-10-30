@@ -3,18 +3,30 @@ package base
 import (
 	"config"
 	"fmt"
+	"sync/atomic"
 	"time"
 )
 
+/* To properly define message */
 type Message struct {
-	//to properly define message
 	Command int
 	Key     string
-	Data    string
+	Data    string // for client
+
+	SrcID   int     // for inter-node
+	ObjData *Object // for inter-node
 }
 
+/* Versioning information */
 type Context struct {
 	v_clk []int
+}
+
+func (c *Context) Copy() *Context {
+	ret := new(Context)
+	ret.v_clk = make([]int, len(c.v_clk))
+	copy(ret.v_clk, c.v_clk)
+	return ret
 }
 
 type Object struct {
@@ -31,19 +43,28 @@ func (o *Object) IsReplica() bool {
 	return o.isReplica
 }
 
+func (o *Object) Copy() Object {
+	return Object{context: o.context.Copy(), data: o.data, isReplica: o.isReplica}
+}
+
+func (o *Object) ToString() string {
+	return fmt.Sprintf("context=%v, data=%s, isReplica=%v", o.context, o.data, o.isReplica)
+}
+
 type Node struct {
 	id        int
 	v_clk     []int
-	channels  []chan Message // TODO: improve ease of adding and removing node channels
+	channels  map[int](chan Message)
 	rcv_ch    chan Message
 	client_ch chan Message //communicates with "frontend" client
 	tokens    []*Token
-	data      map[string]*Object // key-value data store
-	backup    map[*Node](map[string]*Object) // backup of key-value data stores
-	close_ch  chan struct{}      //to close go channels properly
+	data      map[string]*Object           // key-value data store
+	backup    map[int](map[string]*Object) // backup of key-value data stores
+	close_ch  chan struct{}                //to close go channels properly
 
+	awaitAck    map[int](*atomic.Bool) // flags to check on timeout routines
 	tokenStruct BST
-	aliveSince time.Time
+	aliveSince  time.Time
 }
 
 func (n *Node) GetTokens() []*Token {
@@ -68,7 +89,7 @@ func (n *Node) SetAliveSince(alive time.Time) {
 
 type Token struct {
 	id          int
-	phy_node    *Node
+	phy_id      int
 	range_start string
 	range_end   string
 }
@@ -121,7 +142,7 @@ func (bst *BST) Search(value string) *TreeNode {
 
 func (bst *BST) searchTok(root *TreeNode, value string) *TreeNode {
 	if config.DEBUG_LEVEL >= 3 {
-		fmt.Printf("token %d, range start = %s, range end = %s, value = %s\n", 
+		fmt.Printf("token %d, range start = %s, range end = %s, value = %s\n",
 			root.Token.id, root.Token.range_start, root.Token.range_end, value)
 	}
 

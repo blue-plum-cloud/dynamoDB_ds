@@ -84,7 +84,7 @@ func InitializeTokens(phy_nodes []*Node, numTokens int) {
 		fmt.Println()
 		for j := 0; j < tokensPerNode; j++ {
 			token := allTokens[tokenCounter]
-			token.phy_node = node
+			token.phy_id = node.GetID()
 			node.tokens = append(node.tokens, token)
 			tokenCounter++
 		}

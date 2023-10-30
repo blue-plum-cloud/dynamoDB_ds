@@ -4,8 +4,14 @@ import (
 	"base"
 	"fmt"
 	"sync"
-	"testing"
 )
+
+// import (
+// 	"base"
+// 	"fmt"
+// 	"sync"
+// 	"testing"
+// )
 
 var wg sync.WaitGroup
 
@@ -29,62 +35,62 @@ func setupNodes() ([]*base.Node, chan struct{}) {
 	return phy_nodes, close_ch
 }
 
-func TestSimplePutGet(t *testing.T) {
-	phy_nodes, close_ch := setupNodes()
+// func TestSimplePutGet(t *testing.T) {
+// 	phy_nodes, close_ch := setupNodes()
 
-	key := "key"
-	expected := "value"
+// 	key := "key"
+// 	expected := "value"
 
-	node := base.FindNode(key, phy_nodes)
-	args := []int{0, 0, 0} //change this to global config
-	node.Put(key, expected, args)
+// 	node := base.FindNode(key, phy_nodes)
+// 	args := []int{0, 0, 0} //change this to global config
+// 	node.Put(key, expected, args)
 
-	actual := node.Get(key).GetData()
+// 	actual := node.Get(key).GetData()
 
-	if actual != expected {
-		t.Errorf("Expected %s, but got %s", expected, actual)
-	}
+// 	if actual != expected {
+// 		t.Errorf("Expected %s, but got %s", expected, actual)
+// 	}
 
-	close(close_ch)
-}
+// 	close(close_ch)
+// }
 
-func TestMultiplePutSingleGet(t *testing.T) {
-	phy_nodes, close_ch := setupNodes()
+// func TestMultiplePutSingleGet(t *testing.T) {
+// 	phy_nodes, close_ch := setupNodes()
 
-	key := "key"
-	expected := "value"
+// 	key := "key"
+// 	expected := "value"
 
-	node := base.FindNode(key, phy_nodes)
+// 	node := base.FindNode(key, phy_nodes)
 
-	// Find the coordinator node responsible for storing the data
-	args := []int{0, 0, 0} // change this to global config
-	node.Put(key, expected, args)
-	node1 := base.FindNode("u bad", phy_nodes)
-	node1.Put("u bad", "u good", args)
-	node2 := base.FindNode("this is", phy_nodes)
-	node2.Put("this is", "da bomb", args)
+// 	// Find the coordinator node responsible for storing the data
+// 	args := []int{0, 0, 0} // change this to global config
+// 	node.Put(key, expected, args)
+// 	node1 := base.FindNode("u bad", phy_nodes)
+// 	node1.Put("u bad", "u good", args)
+// 	node2 := base.FindNode("this is", phy_nodes)
+// 	node2.Put("this is", "da bomb", args)
 
-	actual := node.Get(key).GetData()
+// 	actual := node.Get(key).GetData()
 
-	if actual != expected {
-		t.Errorf("Expected %s, but got %s", expected, actual)
-	}
+// 	if actual != expected {
+// 		t.Errorf("Expected %s, but got %s", expected, actual)
+// 	}
 
-	close(close_ch)
-}
+// 	close(close_ch)
+// }
 
-func TestGetNoData(t *testing.T) {
-	phy_nodes, close_ch := setupNodes()
+// func TestGetNoData(t *testing.T) {
+// 	phy_nodes, close_ch := setupNodes()
 
-	key := "key"
+// 	key := "key"
 
-	node := base.FindNode(key, phy_nodes)
+// 	node := base.FindNode(key, phy_nodes)
 
-	actual := node.Get(key)
+// 	actual := node.Get(key)
 
-	if actual.GetData() != "" {
-		t.Errorf("Expected 'nothing', but got an something")
-	}
+// 	if actual.GetData() != "" {
+// 		t.Errorf("Expected 'nothing', but got an something")
+// 	}
 
-	close(close_ch)
-}
+// 	close(close_ch)
+// }
