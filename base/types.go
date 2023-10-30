@@ -7,6 +7,14 @@ import (
 	"time"
 )
 
+type Config struct {
+	NUM_NODES             int
+	NUM_TOKENS            int
+	CLIENT_GET_TIMEOUT_MS int
+	CLIENT_PUT_TIMEOUT_MS int
+	SET_DATA_TIMEOUT_NS   int
+}
+
 /* To properly define message */
 type Message struct {
 	Command int
