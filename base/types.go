@@ -12,7 +12,7 @@ type Config struct {
 	NUM_TOKENS            int
 	CLIENT_GET_TIMEOUT_MS int
 	CLIENT_PUT_TIMEOUT_MS int
-	SET_DATA_TIMEOUT_NS   int
+	SET_DATA_TIMEOUT_MS   int
 	W                     int
 	R                     int
 	N                     int

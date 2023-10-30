@@ -14,18 +14,18 @@ func TestNoUpdateGetPut(t *testing.T) {
 	keyValuePairs := generateRandomKeyValuePairs(20, 100, 1000)
 
 	var tests = []struct {
-		numNodes, numTokens, N, W, CLIENT_GET_TIMEOUT_MS, CLIENT_PUT_TIMEOUT_MS, SET_DATA_TIMEOUT_NS int
+		numNodes, numTokens, N, W, CLIENT_GET_TIMEOUT_MS, CLIENT_PUT_TIMEOUT_MS, SET_DATA_TIMEOUT_MS int
 	}{
-		{5, 5, 0, 0, 2000, 2000, 1000000000},
-		{10, 10, 0, 0, 2000, 2000, 1000000000},
-		{40, 40, 0, 0, 2000, 2000, 1000000000},
-		{100, 100, 0, 0, 2000, 2000, 1000000000},
-		{800, 800, 0, 0, 2000, 2000, 1000000000},
+		{5, 5, 0, 0, 2000, 2000, 1000},
+		{10, 10, 0, 0, 2000, 2000, 1000},
+		{40, 40, 0, 0, 2000, 2000, 1000},
+		{100, 100, 0, 0, 2000, 2000, 1000},
+		{800, 800, 0, 0, 2000, 2000, 1000},
 
-		{5, 10, 0, 0, 2000, 2000, 1000000000},
-		{5, 12, 0, 0, 2000, 2000, 1000000000},
-		{15, 10, 0, 0, 2000, 2000, 1000000000},
-		{273, 927, 0, 0, 2000, 2000, 1000000000},
+		{5, 10, 0, 0, 2000, 2000, 1000},
+		{5, 12, 0, 0, 2000, 2000, 1000},
+		{15, 10, 0, 0, 2000, 2000, 1000},
+		{273, 927, 0, 0, 2000, 2000, 1000},
 	}
 	for _, tt := range tests {
 		testname := fmt.Sprintf("%d_nodes_%d_tokens", tt.numNodes, tt.numTokens)
@@ -35,7 +35,7 @@ func TestNoUpdateGetPut(t *testing.T) {
 				N:          tt.N, W: tt.W,
 				CLIENT_GET_TIMEOUT_MS: tt.CLIENT_GET_TIMEOUT_MS,
 				CLIENT_PUT_TIMEOUT_MS: tt.CLIENT_PUT_TIMEOUT_MS,
-				SET_DATA_TIMEOUT_NS:   tt.SET_DATA_TIMEOUT_NS}
+				SET_DATA_TIMEOUT_MS:   tt.SET_DATA_TIMEOUT_MS}
 
 			phy_nodes, close_ch := setUpNodes(&sys_config)
 
@@ -63,17 +63,17 @@ func TestMultipleGetPut(t *testing.T) {
 	keyValuePairs := generateRandomKeyValuePairs(200, 1000, 1000)
 
 	var tests = []struct {
-		numNodes, numTokens, N, W, CLIENT_GET_TIMEOUT_MS, CLIENT_PUT_TIMEOUT_MS, SET_DATA_TIMEOUT_NS int
+		numNodes, numTokens, N, W, CLIENT_GET_TIMEOUT_MS, CLIENT_PUT_TIMEOUT_MS, SET_DATA_TIMEOUT_MS int
 	}{
-		{5, 5, 0, 0, 2000, 2000, 1000000000},
-		{10, 10, 0, 0, 2000, 2000, 1000000000},
-		{40, 40, 0, 0, 2000, 2000, 1000000000},
-		{100, 100, 0, 0, 2000, 2000, 1000000000},
-		{800, 800, 0, 0, 2000, 2000, 1000000000},
+		{5, 5, 0, 0, 2000, 2000, 1000},
+		{10, 10, 0, 0, 2000, 2000, 1000},
+		{40, 40, 0, 0, 2000, 2000, 1000},
+		{100, 100, 0, 0, 2000, 2000, 1000},
+		{800, 800, 0, 0, 2000, 2000, 1000},
 
-		{5, 10, 0, 0, 2000, 2000, 1000000000},
-		{5, 12, 0, 0, 2000, 2000, 1000000000},
-		{15, 10, 0, 0, 2000, 2000, 1000000000},
+		{5, 10, 0, 0, 2000, 2000, 1000},
+		{5, 12, 0, 0, 2000, 2000, 1000},
+		{15, 10, 0, 0, 2000, 2000, 1000},
 	}
 	for _, tt := range tests {
 		testname := fmt.Sprintf("%d_nodes_%d_tokens", tt.numNodes, tt.numTokens)
@@ -83,7 +83,7 @@ func TestMultipleGetPut(t *testing.T) {
 				N:          tt.N, W: tt.W,
 				CLIENT_GET_TIMEOUT_MS: tt.CLIENT_GET_TIMEOUT_MS,
 				CLIENT_PUT_TIMEOUT_MS: tt.CLIENT_PUT_TIMEOUT_MS,
-				SET_DATA_TIMEOUT_NS:   tt.SET_DATA_TIMEOUT_NS}
+				SET_DATA_TIMEOUT_MS:   tt.SET_DATA_TIMEOUT_MS}
 
 			phy_nodes, close_ch := setUpNodes(&sys_config)
 

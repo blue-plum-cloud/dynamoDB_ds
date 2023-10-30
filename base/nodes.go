@@ -153,7 +153,7 @@ func (n *Node) updateToken(token *Token, visitedNodes map[int]struct{}, msg Mess
 			}
 			break
 		}
-		if time.Since(reqTime) > time.Duration(c.SET_DATA_TIMEOUT_NS)*time.Nanosecond {
+		if time.Since(reqTime) > time.Duration(c.SET_DATA_TIMEOUT_MS)*time.Millisecond {
 			fmt.Printf("node %d: update node %d timeout reached.\n", n.GetID(), token.phy_id)
 			// TODO: hinted handoff to N+1-th physical node from current node
 			break
@@ -235,7 +235,7 @@ func (n *Node) Put(key string, value string, nValue []int, c *Config) {
 }
 
 // helper func for GET
-func (n *Node) requestTreeNodeData(curToken *Token, hashKey string) *Object {
+func (n *Node) requestTreeNodeData(curToken *Token, hashKey string, c *Config) *Object {
 	if _, exists := n.awaitAck[curToken.phy_id]; !exists {
 		n.awaitAck[curToken.phy_id] = new(atomic.Bool)
 	}
@@ -251,7 +251,7 @@ func (n *Node) requestTreeNodeData(curToken *Token, hashKey string) *Object {
 			return resp.ObjData
 		}
 
-		if time.Since(reqTime) > config.SET_DATA_TIMEOUT_NS {
+		if time.Since(reqTime) > time.Duration(c.SET_DATA_TIMEOUT_MS)*time.Millisecond {
 			fmt.Printf("node %d: request node %d timeout reached.\n", n.GetID(), curToken.phy_id)
 			break
 		}
