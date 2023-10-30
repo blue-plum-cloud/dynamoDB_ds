@@ -35,9 +35,13 @@ func TestGenerateRandomString(t *testing.T) {
 }
 
 // TestUpdateValues will test if randomlyUpdateValues function
-// updates values in key-value pairs
+// updates values in key-value pairs. Allow error margin due to random
+// nature of updates.
 func TestUpdateValues(t *testing.T) {
-	keyValuePairs := generateRandomKeyValuePairs(100, 100, 100000)
+	ERROR_MARGIN_ALLOWED := 0.01
+	numKeyValuePairs := 100000
+	errCount := 0
+	keyValuePairs := generateRandomKeyValuePairs(100, 100, numKeyValuePairs)
 	keyValuePairsCopy := map[string]string{}
 
 	// Copy key value pairs
@@ -50,7 +54,10 @@ func TestUpdateValues(t *testing.T) {
 	// Check if values are the same
 	for key, value := range keyValuePairs {
 		if value == keyValuePairsCopy[key] {
-			t.Errorf("key: %s, value %s did not change. expected different values", key, value)
+			errCount += 1
+			if float64(errCount) > ERROR_MARGIN_ALLOWED*float64(numKeyValuePairs) {
+				t.Errorf("key: %s, value %s did not change. expected different values. exceeded allowed margin of %f", key, value, ERROR_MARGIN_ALLOWED)
+			}
 		}
 	}
 }
