@@ -4,6 +4,7 @@ import (
 	"base"
 	"bufio"
 	"config"
+	"constants"
 	"errors"
 	"fmt"
 	"os"
@@ -25,7 +26,7 @@ func ParseOneArg(input string, commandName string) (string, error) {
 	return key, nil
 }
 
-func ListenGetReply(key string, client_ch chan base.Message, c *base.Config) {
+func ListenGetReply(key string, client_ch chan base.Message, c *config.Config) {
 	select {
 	case value := <-client_ch: // reply received in time
 		hashkey := base.ComputeMD5(key)
@@ -69,7 +70,7 @@ func ParseTwoArgs(input string, commandName string) (string, string, error) {
 	return key, value, nil
 }
 
-func ListenPutReply(key string, value string, client_ch chan base.Message, c *base.Config) {
+func ListenPutReply(key string, value string, client_ch chan base.Message, c *config.Config) {
 	select {
 	case ack := <-client_ch: // reply received in time
 		if ack.Key != key {
@@ -83,8 +84,7 @@ func ListenPutReply(key string, value string, client_ch chan base.Message, c *ba
 	}
 }
 
-
-func SetConfigs(c *base.Config, reader *bufio.Reader) {
+func SetConfigs(c *config.Config, reader *bufio.Reader) {
 	fmt.Println("Start System Configuration")
 
 	prompts := []struct {
@@ -100,6 +100,7 @@ func SetConfigs(c *base.Config, reader *bufio.Reader) {
 		{fmt.Sprintf("Set number of N (default: %d): ", config.N), func(val int) { c.N = val }, config.N},
 		{fmt.Sprintf("Set number of R (default: %d): ", config.R), func(val int) { c.R = val }, config.R},
 		{fmt.Sprintf("Set number of W (default: %d): ", config.W), func(val int) { c.W = val }, config.W},
+		{fmt.Sprintf("Set debug level (default: %d): ", config.DEBUG_LEVEL), func(val int) { c.DEBUG_LEVEL = val }, config.DEBUG_LEVEL},
 	}
 
 	for _, prompt := range prompts {
@@ -133,7 +134,7 @@ func SetConfigs(c *base.Config, reader *bufio.Reader) {
 	fmt.Println("Starting system...")
 }
 
-func printConfig(c *base.Config) {
+func printConfig(c *config.Config) {
 	fmt.Println("----------------------------------------")
 	fmt.Printf("Physical nodes: %d.\n\n", c.NUM_NODES)
 	fmt.Printf("Tokens: %d.\n\n", c.NUM_TOKENS)
@@ -148,21 +149,21 @@ func main() {
 	fmt.Println("Starting the application...")
 	reader := bufio.NewReader(os.Stdin)
 
-	sys_config := base.Config{}
-	SetConfigs(&sys_config, reader)
+	c := config.InstantiateConfig()
+	SetConfigs(&c, reader)
 
 	//create close_ch for goroutines
 	close_ch := make(chan struct{})
 	client_ch := make(chan base.Message)
 
 	//node and token initialization
-	phy_nodes := base.CreateNodes(client_ch, close_ch, sys_config.NUM_NODES)
-	base.InitializeTokens(phy_nodes, sys_config.NUM_TOKENS)
+	phy_nodes := base.CreateNodes(client_ch, close_ch, &c)
+	base.InitializeTokens(phy_nodes, &c)
 
 	//run nodes
 	for i := range phy_nodes {
 		wg.Add(1)
-		go phy_nodes[i].Start(&wg, &sys_config)
+		go phy_nodes[i].Start(&wg, &c)
 	}
 
 	for {
@@ -178,11 +179,11 @@ func main() {
 				continue
 			}
 
-			node := base.FindNode(key, phy_nodes)
+			node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
-			channel <- base.Message{Key: key, Command: config.REQ_READ}
+			channel <- base.Message{Key: key, Command: constants.REQ_READ}
 
-			ListenGetReply(key, client_ch, &sys_config)
+			ListenGetReply(key, client_ch, &c)
 
 		} else if strings.HasPrefix(input, "put(") && strings.HasSuffix(input, ")") {
 			key, value, err := ParseTwoArgs(input, "put")
@@ -191,11 +192,11 @@ func main() {
 				continue
 			}
 
-			node := base.FindNode(key, phy_nodes)
+			node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
-			channel <- base.Message{Key: key, Command: config.REQ_WRITE, Data: value}
+			channel <- base.Message{Key: key, Command: constants.REQ_WRITE, Data: value}
 
-			ListenPutReply(key, value, client_ch, &sys_config)
+			ListenPutReply(key, value, client_ch, &c)
 
 		} else if strings.HasPrefix(input, "kill(") && strings.HasSuffix(input, ")") {
 			nodeIdxString, duration, err := ParseTwoArgs(input, "kill")
@@ -207,8 +208,8 @@ func main() {
 			nodeIdx, _ := strconv.Atoi(nodeIdxString)
 			node := phy_nodes[nodeIdx]
 			channel := (*node).GetChannel()
-			channel <- base.Message{Command: config.REQ_KILL, Data: duration}
-		
+			channel <- base.Message{Command: constants.REQ_KILL, Data: duration}
+
 		} else if strings.HasPrefix(input, "revive(") && strings.HasSuffix(input, ")") {
 			nodeIdxString, err := ParseOneArg(input, "revive")
 			if err != nil {
@@ -219,7 +220,7 @@ func main() {
 			nodeIdx, _ := strconv.Atoi(nodeIdxString)
 			node := phy_nodes[nodeIdx]
 			channel := (*node).GetChannel()
-			channel <- base.Message{Command: config.REQ_REVIVE}
+			channel <- base.Message{Command: constants.REQ_REVIVE}
 
 		} else if input == "exit" {
 			close(close_ch)

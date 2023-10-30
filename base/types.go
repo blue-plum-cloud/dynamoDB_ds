@@ -2,20 +2,10 @@ package base
 
 import (
 	"config"
+	"constants"
 	"fmt"
 	"sync/atomic"
 )
-
-type Config struct {
-	NUM_NODES             int
-	NUM_TOKENS            int
-	CLIENT_GET_TIMEOUT_MS int
-	CLIENT_PUT_TIMEOUT_MS int
-	SET_DATA_TIMEOUT_MS   int
-	W                     int
-	R                     int
-	N                     int
-}
 
 /* To properly define message */
 type Message struct {
@@ -153,12 +143,12 @@ func (bst *BST) insertTok(root *TreeNode, token *Token) *TreeNode {
 }
 
 // Search for a Token whose range includes the given value.
-func (bst *BST) Search(value string) *TreeNode {
-	return bst.searchTok(bst.Root, value)
+func (bst *BST) Search(value string, c *config.Config) *TreeNode {
+	return bst.searchTok(bst.Root, value, c)
 }
 
-func (bst *BST) searchTok(root *TreeNode, value string) *TreeNode {
-	if config.DEBUG_LEVEL >= 3 {
+func (bst *BST) searchTok(root *TreeNode, value string, c *config.Config) *TreeNode {
+	if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
 		fmt.Printf("token %d, range start = %s, range end = %s, value = %s\n",
 			root.Token.id, root.Token.range_start, root.Token.range_end, value)
 	}
@@ -172,10 +162,10 @@ func (bst *BST) searchTok(root *TreeNode, value string) *TreeNode {
 	}
 
 	if hashInRange(value, value, root.Token.GetStartRange()) {
-		return bst.searchTok(root.Left, value)
+		return bst.searchTok(root.Left, value, c)
 	}
 
-	return bst.searchTok(root.Right, value)
+	return bst.searchTok(root.Right, value, c)
 }
 
 func (bst *BST) getNext(node *TreeNode) *TreeNode {

@@ -2,6 +2,7 @@ package base
 
 import (
 	"config"
+	"constants"
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
@@ -30,11 +31,12 @@ func hashInRange(hashStr string, lowerBound string, upperBound string) bool {
 	return hashInt.Cmp(lower) >= 0 && hashInt.Cmp(upper) <= 0
 }
 
-func InitializeTokens(phy_nodes []*Node, numTokens int) {
+func InitializeTokens(phy_nodes []*Node, c *config.Config) {
 	fmt.Println("Initializing tokens...")
 	maxValue := new(big.Int)
 	maxValue.SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16)
 
+	numTokens := c.NUM_TOKENS
 	baseTokensPerNode := 0
 	extraTokens := 0
 	tokenRangeSize := new(big.Int)
@@ -68,7 +70,7 @@ func InitializeTokens(phy_nodes []*Node, numTokens int) {
 		allTokens = append(allTokens, token)
 	}
 
-	if config.DEBUG_LEVEL >= 2 {
+	if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
 		rand.Seed(0)
 	}
 	rand.Shuffle(len(allTokens), func(i, j int) { allTokens[i], allTokens[j] = allTokens[j], allTokens[i] })
@@ -91,7 +93,7 @@ func InitializeTokens(phy_nodes []*Node, numTokens int) {
 	}
 
 	// Insert all tokens into each node's tokensStruct (BST)
-	if config.DEBUG_LEVEL >= 3 {
+	if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
 		fmt.Printf("All tokens ==== \n")
 		for _, token := range allTokens {
 			fmt.Printf("token: %v\n", token)
@@ -105,7 +107,7 @@ func InitializeTokens(phy_nodes []*Node, numTokens int) {
 		}
 	}
 
-	if config.DEBUG_LEVEL >= 3 {
+	if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
 		fmt.Printf("Inserted tokens ==== \n")
 		for _, node := range phy_nodes {
 			node.tokenStruct.PrintBST()
