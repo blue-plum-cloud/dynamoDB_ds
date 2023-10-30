@@ -4,9 +4,9 @@ const (
 	//default values for config struct
 	NUM_NODES  = 10
 	NUM_TOKENS = 10
-	N          = 10 // number of put replication
-	R          = 3  //
-	W          = 3  // just put here first
+	N          = 8 // number of put replication, MUST BE LESS THAN NUM_NODES
+	R          = 3
+	W          = 3
 
 	CLIENT_GET_TIMEOUT_MS = 2000
 	CLIENT_PUT_TIMEOUT_MS = 2000
