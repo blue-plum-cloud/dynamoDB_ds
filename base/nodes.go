@@ -12,8 +12,8 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	//put timer
-	putTimer := time.NewTimer(config.CLIENT_GET_TIMEOUT_MS)
-	putTimer.Stop()
+	getTimer := time.NewTimer(config.CLIENT_GET_TIMEOUT_MS)
+	getTimer.Stop()
 	for {
 		select {
 		case <-n.close_ch:
@@ -53,11 +53,10 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 					n.reconcile(n.data[msg.Key], msg.ObjData)
 					fmt.Println(msg.Key)
 					n.client_ch <- Message{Command: config.ACK, Key: msg.Key, Data: n.data[msg.Key].data, SrcID: n.GetID()}
-					n.numReads = 0
 				} else {
 					n.reconcile(n.data[msg.Key], msg.ObjData)
-					n.numReads++
 				}
+				n.numReads++
 
 			case config.ACK:
 				if config.DEBUG_LEVEL >= 1 {
@@ -67,10 +66,12 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 
 			}
 
-		case <-putTimer.C:
-			fmt.Println("Quorum not fulfilled for get(), get() is denied")
+		case <-getTimer.C:
+			if n.numReads < config.R {
+				fmt.Println("Quorum not fulfilled for get(), get() is failed")
+			}
 			n.numReads = 0
-			putTimer.Reset(config.CLIENT_GET_TIMEOUT_MS)
+			getTimer.Reset(config.CLIENT_GET_TIMEOUT_MS)
 		}
 	}
 }
@@ -259,11 +260,13 @@ func (n *Node) requestTreeNodeData(curToken *Token, hashKey string) *Object {
 
 // attempt to reconcile original with receiving
 func (n *Node) reconcile(original *Object, replica *Object) {
-	if compareVC(replica.context.v_clk, original.context.v_clk) != -1 {
-		//do nothing, means latestObj=objects[0] alrd has the latest clock
+	//if 1, means the replica has a strictly greater clock, reconcile.
+	if compareVC(replica.context.v_clk, original.context.v_clk) == 1 {
 		original.data = replica.data
 		original.context = replica.Copy().context
 	}
+	//if 0, means the replica and original have concurrent copies. original keeps its own copy
+	//if -1, means latestObj=objects[0] alrd has the latest clock
 }
 
 // helper func for GET
@@ -283,7 +286,6 @@ func compareVC(a, b []int) int {
 func (n *Node) Get(key string) {
 	n.increment_vclk()
 	hashKey := ComputeMD5(key)
-	R := config.R
 
 	n.numReads = 1
 
@@ -297,7 +299,7 @@ func (n *Node) Get(key string) {
 
 	reqCounter := 0
 
-	for reqCounter < R {
+	for reqCounter < config.N {
 		curTreeNode = n.tokenStruct.getNext(curTreeNode)
 		curToken := curTreeNode.Token
 
