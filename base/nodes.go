@@ -12,8 +12,8 @@ import (
 )
 
 /* hijacks Start(), message commands processed is REQ_REVIVE only */
-func (n *Node) busyWait(duration int) {
-	if config.DEBUG_LEVEL >= constants.INFO {
+func (n *Node) busyWait(duration int, c *config.Config) {
+	if c.DEBUG_LEVEL >= constants.INFO {
 		fmt.Printf("\nbusyWait: %d killed for %d ms...\n", n.GetID(), duration)
 	}
 	reviveTime := time.Now().Add(time.Millisecond * time.Duration(duration))
@@ -22,7 +22,7 @@ func (n *Node) busyWait(duration int) {
 		select {
 		case msg := <-n.rcv_ch: // consume rcv_ch and throw
 			if msg.Command == constants.REQ_REVIVE {
-				if config.DEBUG_LEVEL >= constants.INFO {
+				if c.DEBUG_LEVEL >= constants.INFO {
 					fmt.Printf("\nbusyWait: %d reviving...\n", n.GetID())
 				}
 				return
@@ -30,7 +30,7 @@ func (n *Node) busyWait(duration int) {
 
 		case <-time.After(10 * time.Millisecond): // check in intervals of 10ms
 			if time.Since(reviveTime) >= 0 {
-				if config.DEBUG_LEVEL >= constants.INFO {
+				if c.DEBUG_LEVEL >= constants.INFO {
 					fmt.Printf("\nbusyWait: %d reviving...\n", n.GetID())
 				}
 				return
@@ -52,14 +52,14 @@ func (n *Node) restoreHandoff(token *Token, msg Message, c *config.Config) {
 
 	for {
 		if !(n.awaitAck[token.phy_id].Load()) {
-			if config.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
+			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
 				fmt.Printf("restoreHandoff: %d->%d complete.\n", n.GetID(), token.phy_id)
 			}
 			delete(n.backup, token.phy_id)
 			return
 		}
 		if time.Since(reqTime) > time.Duration(config.SET_DATA_TIMEOUT_MS)*time.Millisecond {
-			if config.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
+			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
 				fmt.Printf("restoreHandoff: %d->%d timeout reached. Retrying...\n", n.GetID(), token.phy_id)
 			}
 			n.channels[token.phy_id] <- msg
@@ -72,7 +72,7 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 	defer wg.Done()
 
 	//put timer
-	getTimer := time.NewTimer(config.CLIENT_GET_TIMEOUT_MS)
+	getTimer := time.NewTimer(time.Duration(c.CLIENT_GET_TIMEOUT_MS))
 	getTimer.Stop()
 
 	for {
@@ -96,7 +96,7 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 				if err != nil {
 					fmt.Printf("REQ_KILL ERROR: %d->%d invalid duration %s, expect integer value denoting milliseconds to kill for.", msg.SrcID, n.GetID(), msg.Data)
 				}
-				n.busyWait(duration) // blocking
+				n.busyWait(duration, c) // blocking
 
 			case constants.SET_DATA:
 				if c.DEBUG_LEVEL >= constants.INFO {
@@ -148,11 +148,11 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 			}
 
 		case <-getTimer.C:
-			if n.numReads < config.R {
+			if n.numReads < c.R {
 				fmt.Println("Quorum not fulfilled for get(), get() is failed")
 			}
 			n.numReads = 0
-			getTimer.Reset(config.CLIENT_GET_TIMEOUT_MS)
+			getTimer.Reset(time.Duration(c.CLIENT_GET_TIMEOUT_MS))
 		}
 	}
 }
@@ -206,13 +206,13 @@ func (n *Node) updateToken(token *Token, msg Message, c *config.Config) bool {
 
 	for {
 		if !(n.awaitAck[token.phy_id].Load()) {
-			if config.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
+			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
 				fmt.Printf("updateToken: Replicated to token=%d, node=%d\n", token.GetID(), token.phy_id)
 			}
 			return true
 		}
 		if time.Since(reqTime) > time.Duration(c.SET_DATA_TIMEOUT_MS)*time.Millisecond {
-			if config.DEBUG_LEVEL >= constants.VERY_VERBOSE {
+			if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
 				fmt.Printf("updateToken: %d->%d timeout reached.\n", n.GetID(), token.phy_id)
 			}
 			return false
