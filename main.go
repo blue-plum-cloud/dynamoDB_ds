@@ -92,6 +92,9 @@ func SetConfigs(c *base.Config, reader *bufio.Reader) {
 		{fmt.Sprintf("Set number of CLIENT_GET_TIMEOUT in milliseconds (default: %d): ", config.CLIENT_GET_TIMEOUT_MS), func(val int) { c.CLIENT_GET_TIMEOUT_MS = val }, config.CLIENT_GET_TIMEOUT_MS},
 		{fmt.Sprintf("Set number of CLIENT_PUT_TIMEOUT in milliseconds (default: %d): ", config.CLIENT_PUT_TIMEOUT_MS), func(val int) { c.CLIENT_PUT_TIMEOUT_MS = val }, config.CLIENT_PUT_TIMEOUT_MS},
 		{fmt.Sprintf("Set number of SET_DATA_TIMEOUT in nanoseconds (default: %d): ", config.SET_DATA_TIMEOUT_NS), func(val int) { c.SET_DATA_TIMEOUT_NS = val }, config.SET_DATA_TIMEOUT_NS},
+		{fmt.Sprintf("Set number of N (default: %d): ", config.N), func(val int) { c.N = val }, config.N},
+		{fmt.Sprintf("Set number of R (default: %d): ", config.R), func(val int) { c.R = val }, config.R},
+		{fmt.Sprintf("Set number of W (default: %d): ", config.W), func(val int) { c.W = val }, config.W},
 	}
 
 	for _, prompt := range prompts {
