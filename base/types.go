@@ -10,8 +10,6 @@ import (
 /* To properly define message */
 type Message struct {
 	Command int
-	repCnt  int
-	oriKey  string
 	Key     string
 	Data    string // for client
 
@@ -204,28 +202,4 @@ func (bst *BST) PrintBST() {
 		fmt.Printf("%v\n", node.Token)
 		node = bst.getNext(node)
 	}
-}
-
-type Counter struct {
-	Count  int
-	Target int
-}
-
-func NewCounter(target int) *Counter {
-	return &Counter{
-		Count:  0,
-		Target: target,
-	}
-}
-
-func (i *Counter) Increment() {
-	i.Count++
-}
-
-func (i *Counter) Check() bool {
-	return i.Count == i.Target
-}
-
-func (i *Counter) GetCount() int {
-	return i.Count
 }

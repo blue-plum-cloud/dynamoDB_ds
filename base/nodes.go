@@ -8,9 +8,6 @@ import (
 	"time"
 )
 
-var m sync.Mutex
-var repCounters = make(map[string]*Counter)
-
 func (n *Node) Start(wg *sync.WaitGroup) {
 	defer wg.Done()
 	for {
@@ -23,42 +20,24 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 			if msg.Command == config.REQ_READ {
 				obj := n.Get(msg.Key)
 				n.client_ch <- Message{Command: config.ACK, Key: msg.Key, Data: obj.GetData(), SrcID: n.GetID()}
+
 			} else if msg.Command == config.REQ_WRITE {
-				args := []int{config.N, config.NUM_NODES, config.NUM_TOKENS} //change this to global config
+				args := []int{config.N, config.NUM_NODES, config.NUM_TOKENS}
 				go n.Put(msg.Key, msg.Data, args)
 
-				// n.client_ch <- Message{Command: config.ACK, Key: msg.Key, SrcID: n.GetID()}
 			} else if msg.Command == config.SET_DATA {
 				if config.DEBUG_LEVEL >= 1 {
 					fmt.Printf("Start: %d->%d SET_DATA, message info: key=%s, object=(%s)\n", msg.SrcID, n.GetID(), msg.Key, msg.ObjData.ToString())
 				}
-
-				m.Lock()
-				// Get or create the counter for the key
-				counter, exists := repCounters[msg.Key]
-				if !exists {
-					// fmt.Printf("this is rep cnt = %d\n", msg.repCnt)
-					counter = NewCounter(msg.repCnt)
-					repCounters[msg.Key] = counter
-				}
-
-				counter.Increment()
-				// Increment the count, if count == target remove key and notify client
-				// fmt.Print(counter.GetCount())
-				if counter.Check() {
-					n.client_ch <- Message{Command: config.ACK, Key: msg.oriKey, SrcID: n.GetID()}
-
-					delete(repCounters, msg.Key)
-				}
-				m.Unlock()
-
 				n.data[msg.Key] = msg.ObjData
 				n.channels[msg.SrcID] <- Message{Command: config.ACK, Key: msg.Key, SrcID: n.GetID()}
+
 			} else if msg.Command == config.ACK {
 				if config.DEBUG_LEVEL >= 1 {
 					fmt.Printf("Start: %d->%d ACK received\n", msg.SrcID, n.GetID())
 				}
 				n.awaitAck[msg.SrcID].Store(false)
+
 			}
 		}
 	}
@@ -107,27 +86,25 @@ func (n *Node) getHintedHandoffToken(initNode *TreeNode, visitedNodes map[int]st
 }
 
 /* Send message to update the node with object, on timeout, send message to update backup node with the object */
-func (n *Node) updateTreeNode(curTreeNode *TreeNode, visitedNodes map[int]struct{}, replicationCount int, hashKey string, oriKey string, data *Object) {
-	curToken := curTreeNode.Token
-	if _, exists := n.awaitAck[curToken.phy_id]; !exists {
-		n.awaitAck[curToken.phy_id] = new(atomic.Bool)
+func (n *Node) updateToken(token *Token, visitedNodes map[int]struct{}, msg Message) {
+	if _, exists := n.awaitAck[token.phy_id]; !exists {
+		n.awaitAck[token.phy_id] = new(atomic.Bool)
 	}
-	n.awaitAck[curToken.phy_id].Store(true)
-	// fmt.Printf("this is replication count iin update tree node = %d", replicationCount)
-	n.channels[curToken.phy_id] <- Message{Command: config.SET_DATA, Key: hashKey, ObjData: data, SrcID: n.GetID(), oriKey: oriKey, repCnt: replicationCount}
+	n.awaitAck[token.phy_id].Store(true)
+	n.channels[token.phy_id] <- msg
 
 	reqTime := time.Now()
 
 	for {
-		if !(n.awaitAck[curToken.phy_id].Load()) {
-			visitedNodes[curToken.phy_id] = struct{}{}
+		if !(n.awaitAck[token.phy_id].Load()) {
+			visitedNodes[token.phy_id] = struct{}{}
 			if config.DEBUG_LEVEL >= 2 {
-				fmt.Printf("Replicated to token=%d, node=%d\n", curToken.GetID(), curToken.phy_id)
+				fmt.Printf("Replicated to token=%d, node=%d\n", token.GetID(), token.phy_id)
 			}
 			break
 		}
 		if time.Since(reqTime) > config.SET_DATA_TIMEOUT_NS {
-			fmt.Printf("node %d: update node %d timeout reached.\n", n.GetID(), curToken.phy_id)
+			fmt.Printf("node %d: update node %d timeout reached.\n", n.GetID(), token.phy_id)
 			// TODO: hinted handoff to N+1-th physical node from current node
 			break
 		}
@@ -160,7 +137,9 @@ func (n *Node) Put(key string, value string, nValue []int) {
 	n.increment_vclk()
 	copy_vclk := n.copy_vclk()
 
-	fmt.Printf("Coordinator node = %d, responsible for hashkey = %032X\n", n.GetID(), hashKey)
+	if config.DEBUG_LEVEL >= 1 {
+		fmt.Printf("Put: Coordinator node = %d, responsible for hashkey = %032X, replicationCount %d\n", n.GetID(), hashKey, replicationCount)
+	}
 
 	// Replication process
 	curTreeNode := n.tokenStruct.Search(hashKey)
@@ -169,7 +148,12 @@ func (n *Node) Put(key string, value string, nValue []int) {
 
 	// Coordinator copy
 	newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
-	n.updateTreeNode(curTreeNode, visitedNodes, replicationCount, hashKey, key, &newObj)
+	msg := Message{Command: config.SET_DATA, Key: hashKey, ObjData: &newObj, SrcID: n.GetID()}
+	n.updateToken(initToken, visitedNodes, msg)
+
+	if replicationCount == 0 {
+		n.client_ch <- Message{Command: config.ACK, Key: key, SrcID: n.GetID()}
+	}
 
 	for len(visitedNodes) < replicationCount {
 		nextTreeNode := n.tokenStruct.getNext(curTreeNode)
@@ -178,12 +162,18 @@ func (n *Node) Put(key string, value string, nValue []int) {
 
 		// After one loop stop.
 		if curToken.GetID() == initToken.GetID() {
+			fmt.Printf("Put: ERROR! Only replicated %d/%d times!\n", len(visitedNodes), config.N)
 			break
 		}
 
 		if _, visited := visitedNodes[curToken.phy_id]; !visited {
 			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
-			n.updateTreeNode(curTreeNode, visitedNodes, replicationCount, hashKey, key, &newObj)
+			msg := Message{Command: config.SET_DATA, Key: hashKey, ObjData: &newObj, SrcID: n.GetID()}
+			n.updateToken(curToken, visitedNodes, msg)
+		}
+
+		if len(visitedNodes) == config.W {
+			n.client_ch <- Message{Command: config.ACK, Key: key, SrcID: n.GetID()}
 		}
 	}
 }
