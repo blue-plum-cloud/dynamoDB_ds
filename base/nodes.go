@@ -30,6 +30,34 @@ func (n *Node) busyWait(duration int) {
 	}
 }
 
+/* Send message to update the node with object, Keeps retrying forever.*/
+func (n *Node) restoreHandoff(token *Token, msg Message) {
+	if _, exists := n.awaitAck[token.phy_id]; !exists {
+		n.awaitAck[token.phy_id] = new(atomic.Bool)
+	}
+	n.awaitAck[token.phy_id].Store(true)
+	n.channels[token.phy_id] <- msg
+
+	reqTime := time.Now()
+
+	for {
+		if !(n.awaitAck[token.phy_id].Load()) {
+			if config.DEBUG_LEVEL >= 2 {
+				fmt.Printf("restoreHandoff: %d->%d complete.\n", n.GetID(), token.phy_id)
+			}
+			delete(n.backup, token.phy_id)
+			return
+		}
+		if time.Since(reqTime) > config.SET_DATA_TIMEOUT_MS * 1e6 {
+			if config.DEBUG_LEVEL >= 1 {
+				fmt.Printf("restoreHandoff: %d->%d timeout reached. Retrying...\n", n.GetID(), token.phy_id)
+			}
+			n.channels[token.phy_id] <- msg
+			reqTime = time.Now()
+		}
+	}
+}
+
 func (n *Node) Start(wg *sync.WaitGroup, c *Config) {
 	defer wg.Done()
 
@@ -66,6 +94,19 @@ func (n *Node) Start(wg *sync.WaitGroup, c *Config) {
 				}
 				n.data[msg.Key] = msg.ObjData
 				n.channels[msg.SrcID] <- Message{Command: config.ACK, Key: msg.Key, SrcID: n.GetID()}
+			
+			case config.BACK_DATA:
+				if config.DEBUG_LEVEL >= 1 {
+					fmt.Printf("Start: %d->%d BACK_DATA, message info: key=%s, object=(%s)\n", msg.SrcID, n.GetID(), msg.Key, msg.ObjData.ToString())
+				}
+				if _, exists := n.backup[msg.SrcID]; !exists {
+					n.backup[msg.SrcID] = make(map[string]*Object)
+				}
+				n.backup[msg.SrcID][msg.Key] = msg.ObjData
+				n.channels[msg.SrcID] <- Message{Command: config.ACK, Key: msg.Key, SrcID: n.GetID()}
+				msg.Command = config.SET_DATA
+				msg.SrcID = n.GetID()
+				go n.restoreHandoff(msg.HandoffToken, msg)
 
 			case config.READ_DATA: //coordinator requested to read data, so send it back
 				if config.DEBUG_LEVEL >= 1 {
@@ -143,29 +184,8 @@ func getWCount(nValue []int, c *Config) int {
 	return wCount
 }
 
-/* Finds N+1-th available physical node from current node */
-func (n *Node) getHintedHandoffToken(initNode *TreeNode, visitedNodes map[int]struct{}, replicationCount int) *Token {
-	i := replicationCount
-	treeNode := initNode
-	initToken := initNode.Token
-
-	for i > 0 {
-		treeNode := n.tokenStruct.getNext(treeNode)
-
-		if treeNode.Token.GetID() == initToken.GetID() {
-			break
-		}
-
-		if _, visited := visitedNodes[treeNode.Token.phy_id]; !visited {
-			i -= 1
-		}
-	}
-
-	return treeNode.Token
-}
-
-/* Send message to update the node with object, on timeout, send message to update backup node with the object */
-func (n *Node) updateToken(token *Token, visitedNodes map[int]struct{}, msg Message, c *Config) {
+/* Send message to update the node with object. Returns True if ACK receive within timeout, False otherwise */
+func (n *Node) updateToken(token *Token, msg Message) bool {
 	if _, exists := n.awaitAck[token.phy_id]; !exists {
 		n.awaitAck[token.phy_id] = new(atomic.Bool)
 	}
@@ -176,16 +196,16 @@ func (n *Node) updateToken(token *Token, visitedNodes map[int]struct{}, msg Mess
 
 	for {
 		if !(n.awaitAck[token.phy_id].Load()) {
-			visitedNodes[token.phy_id] = struct{}{}
 			if config.DEBUG_LEVEL >= 2 {
-				fmt.Printf("Replicated to token=%d, node=%d\n", token.GetID(), token.phy_id)
+				fmt.Printf("updateToken: Replicated to token=%d, node=%d\n", token.GetID(), token.phy_id)
 			}
-			break
+			return true
 		}
-		if time.Since(reqTime) > time.Duration(c.SET_DATA_TIMEOUT_MS)*time.Millisecond {
-			fmt.Printf("node %d: update node %d timeout reached.\n", n.GetID(), token.phy_id)
-			// TODO: hinted handoff to N+1-th physical node from current node
-			break
+		if time.Since(reqTime) > config.SET_DATA_TIMEOUT_MS * 1e6 {
+			if config.DEBUG_LEVEL >= 1 {
+				fmt.Printf("updateToken: %d->%d timeout reached.\n", n.GetID(), token.phy_id)
+			}
+			return false
 		}
 	}
 }
@@ -225,35 +245,55 @@ func (n *Node) Put(key string, value string, nValue []int, c *Config) {
 	curTreeNode := n.tokenStruct.Search(hashKey)
 	initToken := curTreeNode.Token
 	visitedNodes := make(map[int]struct{}) // To keep track of unique physical nodes. Use map as set. Use struct{} to occupy 0 space
+	handoffQueue := make([]*Token, 0)
 
 	// Coordinator copy
 	newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
-	msg := Message{Command: config.SET_DATA, Key: hashKey, ObjData: &newObj, SrcID: n.GetID()}
-	n.updateToken(initToken, visitedNodes, msg, c)
+	n.data[hashKey] = &newObj // do not handle coordinator die
+	visitedNodes[initToken.phy_id] = struct{}{}
 
 	if replicationCount == 0 {
 		n.client_ch <- Message{Command: config.ACK, Key: key, SrcID: n.GetID()}
 	}
 
-	for len(visitedNodes) < replicationCount {
+	successfulReplication := 0
+	for successfulReplication < replicationCount {
 		nextTreeNode := n.tokenStruct.getNext(curTreeNode)
 		curTreeNode = nextTreeNode
 		curToken := curTreeNode.Token
 
 		// After one loop stop.
 		if curToken.GetID() == initToken.GetID() {
-			fmt.Printf("Put: ERROR! Only replicated %d/%d times!\n", len(visitedNodes), c.N)
+			fmt.Printf("Put: ERROR! Only replicated %d/%d times!\n", successfulReplication, c.N)
 			break
 		}
 
 		if _, visited := visitedNodes[curToken.phy_id]; !visited {
+			isHandoff := len(visitedNodes) > replicationCount // counts coordinator node
 			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
-			msg := Message{Command: config.SET_DATA, Key: hashKey, ObjData: &newObj, SrcID: n.GetID()}
-			n.updateToken(curToken, visitedNodes, msg, c)
+			msg := &Message{Command: config.SET_DATA, Key: hashKey, ObjData: &newObj, SrcID: n.GetID()}
+			if isHandoff {
+				msg.Command = config.BACK_DATA
+				msg.HandoffToken = handoffQueue[0]
+			}
+			updateSuccess := n.updateToken(curToken, *msg)
+			
+			// fail SET_DATA: add to list of tokens to restore to
+			if !updateSuccess && !isHandoff {
+				handoffQueue = append(handoffQueue, curToken)
+			}
+			if updateSuccess {
+				// success BACK_DATA: remove from list of tokens to restore to
+				if isHandoff {
+					handoffQueue = handoffQueue[1:]
+				}
+				successfulReplication += 1
+			}
+			visitedNodes[curToken.phy_id] = struct{}{}
 		}
 
 		// Change the config.W with W when the test case is adjusted accordingly
-		if len(visitedNodes) == c.W {
+		if successfulReplication == c.W {
 			n.client_ch <- Message{Command: config.ACK, Key: key, SrcID: n.GetID()}
 		}
 	}
