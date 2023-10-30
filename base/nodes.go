@@ -200,26 +200,159 @@ func (n *Node) Put(key string, value string, nValue []int) {
 	}
 }
 
-// remember to return object
-// assume MD5 has already been computed
+//helper func for GET
+func (n *Node) requestTreeNodeData (curToken *Token, hashKey string) *Object {
+	if _, exists := n.awaitAck[curToken.phy_id]; !exists {
+		n.awaitAck[curToken.phy_id] = new(atomic.Bool)
+	}
+
+	n.awaitAck[curToken.phy_id].Store(true)
+	n.channels[curToken.phy_id] <- Message{Command: config.REQ_READ, Key: hashKey, SrcID: n.GetID()}
+	reqTime := time.Now()
+
+	for {
+		if !(n.awaitAck[curToken.phy_id].Load()) {
+			//receive the ACK with data
+			resp := <- n.rcv_ch
+			return resp.ObjData
+		}
+
+		if time.Since(reqTime) > config.SET_DATA_TIMEOUT_NS {
+			fmt.Printf("node %d: request node %d timeout reached.\n", n.GetID(), curToken.phy_id)
+			break
+		}
+	}
+	return nil
+}
+
+//helper func for GET
+func (n *Node) reconcile(objects []*Object) *Object {
+	if len(objects) == 0 {
+		return nil
+	}
+
+	latestObj := objects[0] //first obj will be the initial point of reference
+
+	copy_of_latestObj := &Object{
+		data: latestObj.data,
+		context: &Context{v_clk: append([]int(nil), latestObj.context.v_clk...)},
+	}
+
+
+	for _, obj := range objects {
+		if compareVC(obj.context.v_clk, latestObj.context.v_clk) == -1 {
+			//do nothing, means latestObj=objects[0] alrd has the latest clock
+			continue
+
+		} else { //when no conflict (i.e: Clock A <=  than B)
+			copy_of_obj := &Object{
+				data: obj.data,
+				context: &Context{v_clk: append([]int(nil), obj.context.v_clk...)},
+			}
+			copy_of_latestObj = copy_of_obj
+		}
+
+	}
+
+	return copy_of_latestObj
+}
+
+//helper func for GET
+// if A -> B, A strictly lesser than B
+func compareVC(a,b []int) int {
+	for i := range a {
+		if a[i] > b[i] {
+			return -1
+		} else if a[i] < b[i] {
+			return 1
+		}
+	}
+	return 0
+}
+
+// inernal function GET
 func (n *Node) Get(key string) *Object {
 	n.increment_vclk()
 	hashKey := computeMD5(key)
-	obj, exists := n.data[hashKey]
-	//reconciliation function here
-	if exists {
-		return obj
+	R := config.R 
+	copy_vclk := n.copy_vclk()
+
+	//1. get the local data first
+	retrievedObjects := []*Object{}
+	if obj, exists := n.data[hashKey]; exists {
+		newObj := &Object{
+			data: obj.data,
+			context: &Context{v_clk: copy_vclk,},
+		}
+		retrievedObjects = append(retrievedObjects, newObj)
 	}
 
-	for _, nodeBackup := range n.backup {
-		obj, exists = nodeBackup[hashKey]
-		if exists {
-			return obj
+	curTreeNode := n.tokenStruct.Search(hashKey)
+	initToken := curTreeNode.Token
+	visitedNodes := make(map[int]struct{}) // To keep track of unique physical nodes
+
+
+	//2. send REQ_READ
+	reqCounter := 0 //keeps track of outstanding requests
+
+	for len(retrievedObjects) < R {
+		curTreeNode = n.tokenStruct.getNext(curTreeNode)
+		curToken := curTreeNode.Token
+
+		if curToken.GetID() == initToken.GetID() {
+			break
+		}
+
+		if _, visited := visitedNodes[curToken.phy_id]; !visited {
+			n.channels[curToken.phy_id] <- Message{Command: config.REQ_READ, Key: hashKey, SrcID: n.GetID()}
+			visitedNodes[curToken.phy_id] = struct{}{}
+			reqCounter ++ 
 		}
 	}
 
-	newObj := Object{}
-	return &newObj
+	//wait for R replicas or timeout
+	startTime := time.Now()
+	for reqCounter > 0 && time.Since(startTime) < config.CLIENT_GET_TIMEOUT_MS*time.Millisecond {
+		select {
+		case msg := <-n.rcv_ch:
+			if msg.Command == config.ACK && msg.Key == hashKey {
+				copiedReplicaObj := &Object{
+					data: msg.ObjData.data,
+					context: &Context{v_clk: append([]int(nil), msg.ObjData.context.v_clk...)},
+					isReplica: true,
+				}
+				retrievedObjects = append(retrievedObjects, copiedReplicaObj) //TODO: need to deepcopy this?
+				reqCounter --
+			}
+		default:
+			continue
+		}
+	}
+
+	//3. version compare and reconcilation
+	finalObject := n.reconcile(retrievedObjects)
+
+	localObj, exists := n.data[hashKey]
+
+
+	if exists && finalObject != localObj {
+		fmt.Printf("Key %s found in Node%d \n", key, n.id)
+		copy_of_localObj := &Object{
+			data: localObj.data,
+			context: &Context{v_clk: append([]int(nil), localObj.context.v_clk...)},
+		}
+		//if localObj differs from retrived data, compare Vclk
+		if compareVC(localObj.context.v_clk, finalObject.context.v_clk) == -1 { //means localObj is newer, use localObj
+			// finalObject = localObj
+			finalObject = copy_of_localObj
+			//sync with other nodes function here?
+		} else {
+			n.data[hashKey] = finalObject
+		}
+	} else if !exists {
+		finalObject = &Object{}
+	}
+	return finalObject
 }
 
 func CreateNodes(client_ch chan Message, close_ch chan struct{}, numNodes int) []*Node {

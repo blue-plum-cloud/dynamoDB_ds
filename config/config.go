@@ -11,6 +11,7 @@ const (
 	SET_DATA  = 4
 
 	N = 0 // number of put replication
+	R = 2 //
 	W = 0 
 
 	CLIENT_GET_TIMEOUT_MS = 2000

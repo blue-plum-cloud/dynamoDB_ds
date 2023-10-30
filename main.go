@@ -25,21 +25,35 @@ func ParseGetCommand(input string) (string, error) {
 }
 
 func ListenGetReply(key string, client_ch chan base.Message) {
+	
 	select {
 	case value := <-client_ch: // reply received in time
+		fmt.Printf("Received message: %#v\n", value)
 		if value.Key != key {
 			panic("wrong key!")
 		}
 
-		//i'm sure there's a better way here
 		if value.Data != "" {
-			fmt.Println("value is: ", value.Data)
+			fmt.Println("Value is: ", value.Data)
+			//clear remaining messages in the channel after processing the first msg
+			clearChannel(client_ch)
 		} else {
-			fmt.Println("data not found!")
+			fmt.Println("Data not found!")
 		}
 
-	case <-time.After(config.CLIENT_GET_TIMEOUT_MS * time.Millisecond): // timeout reached
+	case <-time.After(config.CLIENT_GET_TIMEOUT_MS * time.Millisecond): // timeout
 		fmt.Println("Get Timeout reached")
+	}
+
+}
+
+func clearChannel(ch chan base.Message) { //helper func for Get
+	for {
+		select{
+		case <- ch:
+		default:
+			return
+		}
 	}
 }
 
@@ -114,6 +128,8 @@ func main() {
 			channel := (*node).GetChannel()
 			channel <- base.Message{Key: key, Command: config.REQ_READ}
 
+			fmt.Printf("Getting key --> %s in main.go\n", key)
+			fmt.Printf("Messages in channel before listening: %d\n", len(client_ch))
 			ListenGetReply(key, client_ch)
 
 		} else if strings.HasPrefix(input, "put(") && strings.HasSuffix(input, ")") {
