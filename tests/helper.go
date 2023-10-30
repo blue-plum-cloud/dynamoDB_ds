@@ -10,9 +10,11 @@ import (
 /*
 ======= Helper functions
 */
-func setUpNodes(numNodes int, numTokens int) ([]*base.Node, chan struct{}) {
 
+func setupNodes(sys_config *base.Config) ([]*base.Node, chan struct{}) {
 	var wg sync.WaitGroup
+	numNodes := 5
+	numTokens := 5
 	//create close_ch for goroutines
 	close_ch := make(chan struct{})
 	client_ch := make(chan base.Message)
@@ -23,7 +25,26 @@ func setUpNodes(numNodes int, numTokens int) ([]*base.Node, chan struct{}) {
 	fmt.Println("Setup nodes completed..")
 	for i := range phy_nodes {
 		wg.Add(1)
-		go phy_nodes[i].Start(&wg)
+		go phy_nodes[i].Start(&wg, sys_config)
+	}
+
+	return phy_nodes, close_ch
+}
+
+func setUpNodes(sys_config *base.Config) ([]*base.Node, chan struct{}) {
+
+	var wg sync.WaitGroup
+	//create close_ch for goroutines
+	close_ch := make(chan struct{})
+	client_ch := make(chan base.Message)
+
+	//node and token initialization
+	phy_nodes := base.CreateNodes(client_ch, close_ch, sys_config.NUM_NODES)
+	base.InitializeTokens(phy_nodes, sys_config.NUM_TOKENS)
+	fmt.Println("Setup nodes completed..")
+	for i := range phy_nodes {
+		wg.Add(1)
+		go phy_nodes[i].Start(&wg, sys_config)
 	}
 
 	return phy_nodes, close_ch
@@ -66,12 +87,12 @@ func generateRandomString(maxN int) string {
 // putKeyValuePairs will go through all key-value pairs in keyValueMap,
 // find the correct node to send put request and send put command
 // to respective node
-func putKeyValuePairs(numNodes int, numTokens int, nValue int, keyValueMap map[string]string, phy_nodes []*base.Node) {
+func putKeyValuePairs(nValue int, keyValueMap map[string]string, phy_nodes []*base.Node, c *base.Config) {
 	// Put all key value pairs into system
 	for key, value := range keyValueMap {
 		node := base.FindNode(key, phy_nodes)
-		args := []int{numNodes, numTokens, nValue}
-		node.Put(key, value, args)
+		args := []int{c.NUM_NODES, c.NUM_TOKENS, nValue}
+		node.Put(key, value, args, c)
 	}
 }
 

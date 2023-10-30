@@ -30,9 +30,10 @@ func TestNoUpdateGetPut(t *testing.T) {
 	for _, tt := range tests {
 		testname := fmt.Sprintf("%d_nodes_%d_tokens", tt.numNodes, tt.numTokens)
 		t.Run(testname, func(t *testing.T) {
-			phy_nodes, close_ch := setupNodes()
+			sys_config := base.Config{NUM_NODES: tt.numNodes, NUM_TOKENS: tt.numTokens}
+			phy_nodes, close_ch := setUpNodes(&sys_config)
 
-			putKeyValuePairs(tt.numNodes, tt.numTokens, 1, keyValuePairs, phy_nodes)
+			putKeyValuePairs(1, keyValuePairs, phy_nodes, &sys_config)
 
 			for key, value := range keyValuePairs {
 				node := base.FindNode(key, phy_nodes)
@@ -70,14 +71,15 @@ func TestMultipleGetPut(t *testing.T) {
 	for _, tt := range tests {
 		testname := fmt.Sprintf("%d_nodes_%d_tokens", tt.numNodes, tt.numTokens)
 		t.Run(testname, func(t *testing.T) {
-			phy_nodes, close_ch := setupNodes()
+			sys_config := base.Config{NUM_NODES: tt.numNodes, NUM_TOKENS: tt.numTokens}
+			phy_nodes, close_ch := setUpNodes(&sys_config)
 
-			putKeyValuePairs(tt.numNodes, tt.numTokens, 1, keyValuePairs, phy_nodes)
+			putKeyValuePairs(1, keyValuePairs, phy_nodes, &sys_config)
 
 			updateTimes := 5
 			for i := 0; i < updateTimes; i++ {
 				randomlyUpdateValues(keyValuePairs, 1000)
-				putKeyValuePairs(tt.numNodes, tt.numTokens, 1, keyValuePairs, phy_nodes)
+				putKeyValuePairs(1, keyValuePairs, phy_nodes, &sys_config)
 			}
 
 			for key, value := range keyValuePairs {

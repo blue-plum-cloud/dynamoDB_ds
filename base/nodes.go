@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func (n *Node) Start(wg *sync.WaitGroup) {
+func (n *Node) Start(wg *sync.WaitGroup, c *Config) {
 	defer wg.Done()
 	for {
 		select {
@@ -22,8 +22,8 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 				n.client_ch <- Message{Command: config.ACK, Key: msg.Key, Data: obj.GetData(), SrcID: n.GetID()}
 
 			} else if msg.Command == config.REQ_WRITE {
-				args := []int{config.N, config.NUM_NODES, config.NUM_TOKENS}
-				go n.Put(msg.Key, msg.Data, args)
+				args := []int{c.N, c.NUM_NODES, c.NUM_TOKENS}
+				go n.Put(msg.Key, msg.Data, args, c)
 
 			} else if msg.Command == config.SET_DATA {
 				if config.DEBUG_LEVEL >= 1 {
@@ -44,10 +44,10 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 }
 
 /* Get Replication count */
-func getReplicationCount(nValue []int) int {
+func getReplicationCount(nValue []int, c *Config) int {
 	replicationCount := 0
 	if len(nValue) == 0 {
-		replicationCount = config.N
+		replicationCount = c.N
 	} else {
 		if nValue[0] >= 0 {
 			replicationCount = nValue[1]
@@ -64,10 +64,10 @@ func getReplicationCount(nValue []int) int {
 	return replicationCount
 }
 
-func getWCount(nValue []int) int {
+func getWCount(nValue []int, c *Config) int {
 	wCount := 0
 	if len(nValue) == 0 {
-		wCount = config.W
+		wCount = c.W
 	} else {
 		if nValue[3] > 0 {
 			wCount = nValue[3]
@@ -102,7 +102,7 @@ func (n *Node) getHintedHandoffToken(initNode *TreeNode, visitedNodes map[int]st
 }
 
 /* Send message to update the node with object, on timeout, send message to update backup node with the object */
-func (n *Node) updateToken(token *Token, visitedNodes map[int]struct{}, msg Message) {
+func (n *Node) updateToken(token *Token, visitedNodes map[int]struct{}, msg Message, c *Config) {
 	if _, exists := n.awaitAck[token.phy_id]; !exists {
 		n.awaitAck[token.phy_id] = new(atomic.Bool)
 	}
@@ -119,7 +119,7 @@ func (n *Node) updateToken(token *Token, visitedNodes map[int]struct{}, msg Mess
 			}
 			break
 		}
-		if time.Since(reqTime) > config.SET_DATA_TIMEOUT_NS {
+		if time.Since(reqTime) > time.Duration(c.SET_DATA_TIMEOUT_NS) {
 			fmt.Printf("node %d: update node %d timeout reached.\n", n.GetID(), token.phy_id)
 			// TODO: hinted handoff to N+1-th physical node from current node
 			break
@@ -148,8 +148,8 @@ func (n *Node) GetChannel() chan Message {
 // Pass in global config details (ReplicationNum, PhysicalNum, VirtualNum, W)
 // Can refactor in the future to use dict instead so we know what are the key and value
 // rather than accessing it by index which we not sure which correspond to which
-func (n *Node) Put(key string, value string, nValue []int) {
-	replicationCount := getReplicationCount(nValue)
+func (n *Node) Put(key string, value string, nValue []int, c *Config) {
+	replicationCount := getReplicationCount(nValue, c)
 
 	// TODO: use this when sir Ian adjust the test case for args in nValue
 	// W := getWCount(nValue)
@@ -170,7 +170,7 @@ func (n *Node) Put(key string, value string, nValue []int) {
 	// Coordinator copy
 	newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
 	msg := Message{Command: config.SET_DATA, Key: hashKey, ObjData: &newObj, SrcID: n.GetID()}
-	n.updateToken(initToken, visitedNodes, msg)
+	n.updateToken(initToken, visitedNodes, msg, c)
 
 	if replicationCount == 0 {
 		n.client_ch <- Message{Command: config.ACK, Key: key, SrcID: n.GetID()}
@@ -183,18 +183,18 @@ func (n *Node) Put(key string, value string, nValue []int) {
 
 		// After one loop stop.
 		if curToken.GetID() == initToken.GetID() {
-			fmt.Printf("Put: ERROR! Only replicated %d/%d times!\n", len(visitedNodes), config.N)
+			fmt.Printf("Put: ERROR! Only replicated %d/%d times!\n", len(visitedNodes), c.N)
 			break
 		}
 
 		if _, visited := visitedNodes[curToken.phy_id]; !visited {
 			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
 			msg := Message{Command: config.SET_DATA, Key: hashKey, ObjData: &newObj, SrcID: n.GetID()}
-			n.updateToken(curToken, visitedNodes, msg)
+			n.updateToken(curToken, visitedNodes, msg, c)
 		}
 
 		// Change the config.W with W when the test case is adjusted accordingly
-		if len(visitedNodes) == config.W {
+		if len(visitedNodes) == c.W {
 			n.client_ch <- Message{Command: config.ACK, Key: key, SrcID: n.GetID()}
 		}
 	}

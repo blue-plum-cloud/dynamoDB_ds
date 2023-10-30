@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"base"
 	"fmt"
 	"testing"
 )
@@ -22,7 +23,8 @@ func TestInitilisationEqual(t *testing.T) {
 	for _, tt := range tests {
 		testname := fmt.Sprintf("%d_nodes_%d_tokens", tt.numNodes, tt.numTokens)
 		t.Run(testname, func(t *testing.T) {
-			phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
+			sys_config := base.Config{NUM_NODES: tt.numNodes, NUM_TOKENS: tt.numTokens}
+			phy_nodes, close_ch := setUpNodes(&sys_config)
 
 			// Check each node has 1 token
 			for _, node := range phy_nodes {
@@ -55,7 +57,8 @@ func TestInitilisationTokenGTNodes(t *testing.T) {
 	for _, tt := range tests {
 		testname := fmt.Sprintf("%d_nodes_%d_tokens", tt.numNodes, tt.numTokens)
 		t.Run(testname, func(t *testing.T) {
-			phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
+			sys_config := base.Config{NUM_NODES: tt.numNodes, NUM_TOKENS: tt.numTokens}
+			phy_nodes, close_ch := setUpNodes(&sys_config)
 
 			// Check each node has correct number of tokens
 			for i, node := range phy_nodes {
@@ -89,7 +92,8 @@ func TestInitilisationTokensLTNodes(t *testing.T) {
 	for _, tt := range tests {
 		testname := fmt.Sprintf("%d_nodes_%d_tokens", tt.numNodes, tt.numTokens)
 		t.Run(testname, func(t *testing.T) {
-			phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
+			sys_config := base.Config{NUM_NODES: tt.numNodes, NUM_TOKENS: tt.numTokens}
+			phy_nodes, close_ch := setUpNodes(&sys_config)
 
 			// Check nodes < i get 1 token and nodes >= i get no tokens
 			for i, node := range phy_nodes {
@@ -123,7 +127,8 @@ func TestInitilisationZeroTokens(t *testing.T) {
 	for _, tt := range tests {
 		testname := fmt.Sprintf("%d_nodes_%d_tokens", tt.numNodes, tt.numTokens)
 		t.Run(testname, func(t *testing.T) {
-			phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
+			sys_config := base.Config{NUM_NODES: tt.numNodes, NUM_TOKENS: tt.numTokens}
+			phy_nodes, close_ch := setUpNodes(&sys_config)
 
 			// Check nodes < i get 1 token and nodes >= i get no tokens
 			for _, node := range phy_nodes {
@@ -152,7 +157,8 @@ func TestInitilisationZeroNodes(t *testing.T) {
 	for _, tt := range tests {
 		testname := fmt.Sprintf("%d_nodes_%d_tokens", tt.numNodes, tt.numTokens)
 		t.Run(testname, func(t *testing.T) {
-			phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
+			sys_config := base.Config{NUM_NODES: tt.numNodes, NUM_TOKENS: tt.numTokens}
+			phy_nodes, close_ch := setUpNodes(&sys_config)
 
 			// Check nodes < i get 1 token and nodes >= i get no tokens
 			for _, node := range phy_nodes {
@@ -181,7 +187,8 @@ func TestInitilisationNegativeNodes(t *testing.T) {
 	for _, tt := range tests {
 		testname := fmt.Sprintf("%d_nodes_%d_tokens", tt.numNodes, tt.numTokens)
 		t.Run(testname, func(t *testing.T) {
-			phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
+			sys_config := base.Config{NUM_NODES: tt.numNodes, NUM_TOKENS: tt.numTokens}
+			phy_nodes, close_ch := setUpNodes(&sys_config)
 
 			if len(phy_nodes) != 0 {
 				t.Errorf("got: %d, expected 0 phy_nodes\n", len(phy_nodes))
@@ -206,7 +213,8 @@ func TestInitilisationNegativeTokens(t *testing.T) {
 	for _, tt := range tests {
 		testname := fmt.Sprintf("%d_nodes_%d_tokens", tt.numNodes, tt.numTokens)
 		t.Run(testname, func(t *testing.T) {
-			phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
+			sys_config := base.Config{NUM_NODES: tt.numNodes, NUM_TOKENS: tt.numTokens}
+			phy_nodes, close_ch := setUpNodes(&sys_config)
 
 			// Check nodes < i get 1 token and nodes >= i get no tokens
 			for _, node := range phy_nodes {
