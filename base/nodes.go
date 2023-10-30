@@ -262,7 +262,6 @@ func (n *Node) Get(key string) *Object {
 	initToken := curTreeNode.Token
 	visitedNodes := make(map[int]struct{}) // To keep track of unique physical nodes
 
-	// visitedNodes[initToken.phy_id.GetID()] = struct{}{}
 
 	//2. send REQ_READ
 	reqCounter := 0 //keeps track of outstanding requests
@@ -301,20 +300,17 @@ func (n *Node) Get(key string) *Object {
 	localObj, exists := n.data[hashKey]
 
 	if exists && finalObject != localObj {
+		fmt.Printf("Key %s found in Node%d \n", key, n.id)
 		//if localObj differs from retrived data, compare Vclk
 		if compareVC(localObj.context.v_clk, finalObject.context.v_clk) == -1 { //means localObj is newer, use localObj
 			finalObject = localObj
 			//sync with other nodes function here?
 		} else {
-			//means finalObject is newer, update localObj
 			n.data[hashKey] = finalObject
 		}
 	} else if !exists {
-		fmt.Println("No data associated with the key is found!!")
 		finalObject = &Object{}
 	}
-	fmt.Printf("This is finalObject:   %v\n", finalObject)
-
 	return finalObject
 }
 

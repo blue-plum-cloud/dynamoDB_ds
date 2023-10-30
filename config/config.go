@@ -10,7 +10,7 @@ const (
 	REQ_KILL  = 3
 	SET_DATA  = 4
 
-	N = 0 // number of put replication
+	N = 10 // number of put replication
 	R = 2 //
 	W = 0 // just put here first
 
