@@ -14,7 +14,7 @@ const (
 	NUM_NODES  = 10
 	NUM_TOKENS = 10
 
-	N          = 3 // number of put replication, MUST BE LESS THAN N
+	N          = 3 // number of put replication, MUST BE LESS THAN NUM_NODES
 	R          = 3  //
 	W          = 3  // just put here first
 

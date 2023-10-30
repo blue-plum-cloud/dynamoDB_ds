@@ -12,7 +12,7 @@ import (
 
 func (n *Node) busyWait(duration int) {
 	if config.DEBUG_LEVEL >= 1 {
-		fmt.Printf("\busyWait: %d killed for %d ms...\n", n.GetID(), duration)
+		fmt.Printf("\nbusyWait: %d killed for %d ms...\n", n.GetID(), duration)
 	}
 	// `select case <- time.After`` not used, since timeout resets with emptying channel
 	reviveTime := time.Now().Add(time.Millisecond * time.Duration(duration))
@@ -31,7 +31,7 @@ func (n *Node) busyWait(duration int) {
 }
 
 /* Send message to update the node with object, Keeps retrying forever.*/
-func (n *Node) restoreHandoff(token *Token, msg Message) {
+func (n *Node) restoreHandoff(token *Token, msg Message, c *Config) {
 	if _, exists := n.awaitAck[token.phy_id]; !exists {
 		n.awaitAck[token.phy_id] = new(atomic.Bool)
 	}
@@ -42,14 +42,14 @@ func (n *Node) restoreHandoff(token *Token, msg Message) {
 
 	for {
 		if !(n.awaitAck[token.phy_id].Load()) {
-			if config.DEBUG_LEVEL >= 2 {
+			if c.DEBUG_LEVEL >= 2 {
 				fmt.Printf("restoreHandoff: %d->%d complete.\n", n.GetID(), token.phy_id)
 			}
 			delete(n.backup, token.phy_id)
 			return
 		}
 		if time.Since(reqTime) > config.SET_DATA_TIMEOUT_MS * 1e6 {
-			if config.DEBUG_LEVEL >= 1 {
+			if c.DEBUG_LEVEL >= 1 {
 				fmt.Printf("restoreHandoff: %d->%d timeout reached. Retrying...\n", n.GetID(), token.phy_id)
 			}
 			n.channels[token.phy_id] <- msg
@@ -106,7 +106,7 @@ func (n *Node) Start(wg *sync.WaitGroup, c *Config) {
 				n.channels[msg.SrcID] <- Message{Command: config.ACK, Key: msg.Key, SrcID: n.GetID()}
 				msg.Command = config.SET_DATA
 				msg.SrcID = n.GetID()
-				go n.restoreHandoff(msg.HandoffToken, msg)
+				go n.restoreHandoff(msg.HandoffToken, msg, c)
 
 			case config.READ_DATA: //coordinator requested to read data, so send it back
 				if config.DEBUG_LEVEL >= 1 {
@@ -185,7 +185,7 @@ func getWCount(nValue []int, c *Config) int {
 }
 
 /* Send message to update the node with object. Returns True if ACK receive within timeout, False otherwise */
-func (n *Node) updateToken(token *Token, msg Message) bool {
+func (n *Node) updateToken(token *Token, msg Message, c *Config) bool {
 	if _, exists := n.awaitAck[token.phy_id]; !exists {
 		n.awaitAck[token.phy_id] = new(atomic.Bool)
 	}
@@ -196,13 +196,13 @@ func (n *Node) updateToken(token *Token, msg Message) bool {
 
 	for {
 		if !(n.awaitAck[token.phy_id].Load()) {
-			if config.DEBUG_LEVEL >= 2 {
+			if c.DEBUG_LEVEL >= 2 {
 				fmt.Printf("updateToken: Replicated to token=%d, node=%d\n", token.GetID(), token.phy_id)
 			}
 			return true
 		}
-		if time.Since(reqTime) > config.SET_DATA_TIMEOUT_MS * 1e6 {
-			if config.DEBUG_LEVEL >= 1 {
+		if time.Since(reqTime) > c.SET_DATA_TIMEOUT_MS * 1e6 {
+			if c.DEBUG_LEVEL >= 1 {
 				fmt.Printf("updateToken: %d->%d timeout reached.\n", n.GetID(), token.phy_id)
 			}
 			return false
@@ -224,7 +224,6 @@ func FindNode(key string, phy_nodes []*Node) *Node {
 }
 
 // internal function
-// Pass in global config details (ReplicationNum, PhysicalNum, VirtualNum, W)
 // Can refactor in the future to use dict instead so we know what are the key and value
 // rather than accessing it by index which we not sure which correspond to which
 func (n *Node) Put(key string, value string, nValue []int, c *Config) {
@@ -237,7 +236,7 @@ func (n *Node) Put(key string, value string, nValue []int, c *Config) {
 	n.increment_vclk()
 	copy_vclk := n.copy_vclk()
 
-	if config.DEBUG_LEVEL >= 1 {
+	if c.DEBUG_LEVEL >= 1 {
 		fmt.Printf("Put: Coordinator node = %d, responsible for hashkey = %032X, replicationCount %d\n", n.GetID(), hashKey, replicationCount)
 	}
 
@@ -276,7 +275,7 @@ func (n *Node) Put(key string, value string, nValue []int, c *Config) {
 				msg.Command = config.BACK_DATA
 				msg.HandoffToken = handoffQueue[0]
 			}
-			updateSuccess := n.updateToken(curToken, *msg)
+			updateSuccess := n.updateToken(curToken, *msg, c)
 			
 			// fail SET_DATA: add to list of tokens to restore to
 			if !updateSuccess && !isHandoff {
@@ -292,7 +291,6 @@ func (n *Node) Put(key string, value string, nValue []int, c *Config) {
 			visitedNodes[curToken.phy_id] = struct{}{}
 		}
 
-		// Change the config.W with W when the test case is adjusted accordingly
 		if successfulReplication == c.W {
 			n.client_ch <- Message{Command: config.ACK, Key: key, SrcID: n.GetID()}
 		}
