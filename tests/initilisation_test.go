@@ -5,10 +5,6 @@ import (
 	"testing"
 )
 
-/*
-======= Initilisation tests
-*/
-
 // TEST I1
 
 // TestInitilisationEqual tests if each node is correctly assigned
