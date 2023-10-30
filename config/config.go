@@ -8,11 +8,14 @@ const (
 	SET_DATA      = 4
 	READ_DATA     = 5
 	READ_DATA_ACK = 6
+	BACK_DATA     = 7
+	REQ_REVIVE    = 8
 
 	//default values for config struct
 	NUM_NODES  = 10
 	NUM_TOKENS = 10
-	N          = 10 // number of put replication
+
+	N          = 3 // number of put replication, MUST BE LESS THAN NUM_NODES
 	R          = 3  //
 	W          = 3  // just put here first
 

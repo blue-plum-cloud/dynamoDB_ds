@@ -15,8 +15,9 @@ import (
 
 var wg sync.WaitGroup
 
-func ParseGetCommand(input string) (string, error) {
-	key := strings.TrimSuffix(strings.TrimPrefix(input, "get("), ")")
+func ParseOneArg(input string, commandName string) (string, error) {
+	trimString := fmt.Sprintf("%s(", commandName)
+	key := strings.TrimSuffix(strings.TrimPrefix(input, trimString), ")")
 	parts := strings.SplitN(key, ",", 2)
 	if len(parts) != 1 {
 		return "", errors.New("Invalid input for get. Expect get(string)")
@@ -56,8 +57,9 @@ func clearChannel(ch chan base.Message) {
 	}
 }
 
-func ParsePutCommand(input string) (string, string, error) {
-	remainder := strings.TrimSuffix(strings.TrimPrefix(input, "put("), ")")
+func ParseTwoArgs(input string, commandName string) (string, string, error) {
+	trimString := fmt.Sprintf("%s(", commandName)
+	remainder := strings.TrimSuffix(strings.TrimPrefix(input, trimString), ")")
 	parts := strings.SplitN(remainder, ",", 2)
 	if len(parts) != 2 {
 		return "", "", errors.New("Invalid input for put. Expect put(string, string)")
@@ -81,16 +83,6 @@ func ListenPutReply(key string, value string, client_ch chan base.Message, c *ba
 	}
 }
 
-func ParseKillCommand(input string) (int, int, error) {
-	remainder := strings.TrimSuffix(strings.TrimPrefix(input, "kill("), ")")
-	parts := strings.SplitN(remainder, ",", 2)
-	if len(parts) != 2 {
-		return 0, 0, errors.New("Invalid input for kill. Expect kill(int, int)")
-	}
-	nodeIdx, _ := strconv.Atoi(strings.TrimSpace(parts[0]))
-	duration, _ := strconv.Atoi(strings.TrimSpace(parts[1]))
-	return nodeIdx, duration, nil
-}
 
 func SetConfigs(c *base.Config, reader *bufio.Reader) {
 	fmt.Println("Start System Configuration")
@@ -174,13 +166,13 @@ func main() {
 	}
 
 	for {
-		fmt.Print("Enter command: ")
+		fmt.Print("\nEnter command: ")
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input) // Remove trailing newline
 
 		//user inputs get()
 		if strings.HasPrefix(input, "get(") && strings.HasSuffix(input, ")") {
-			key, err := ParseGetCommand(input)
+			key, err := ParseOneArg(input, "get")
 			if err != nil {
 				fmt.Println(err)
 				continue
@@ -193,7 +185,7 @@ func main() {
 			ListenGetReply(key, client_ch, &sys_config)
 
 		} else if strings.HasPrefix(input, "put(") && strings.HasSuffix(input, ")") {
-			key, value, err := ParsePutCommand(input)
+			key, value, err := ParseTwoArgs(input, "put")
 			if err != nil {
 				fmt.Println(err)
 				continue
@@ -206,18 +198,28 @@ func main() {
 			ListenPutReply(key, value, client_ch, &sys_config)
 
 		} else if strings.HasPrefix(input, "kill(") && strings.HasSuffix(input, ")") {
-			nodeIdx, duration, err := ParseKillCommand(input)
+			nodeIdxString, duration, err := ParseTwoArgs(input, "kill")
 			if err != nil {
 				fmt.Println(err)
 				continue
 			}
 
-			newAliveSince := time.Now().Add(time.Millisecond * time.Duration(duration))
-			phy_nodes[nodeIdx].SetAliveSince(newAliveSince)
-			if config.DEBUG_LEVEL >= 1 {
-				fmt.Printf("%v\n", time.Now())
-				fmt.Printf("%v\n", phy_nodes[nodeIdx].GetAliveSince())
+			nodeIdx, _ := strconv.Atoi(nodeIdxString)
+			node := phy_nodes[nodeIdx]
+			channel := (*node).GetChannel()
+			channel <- base.Message{Command: config.REQ_KILL, Data: duration}
+		
+		} else if strings.HasPrefix(input, "revive(") && strings.HasSuffix(input, ")") {
+			nodeIdxString, err := ParseOneArg(input, "revive")
+			if err != nil {
+				fmt.Println(err)
+				continue
 			}
+
+			nodeIdx, _ := strconv.Atoi(nodeIdxString)
+			node := phy_nodes[nodeIdx]
+			channel := (*node).GetChannel()
+			channel <- base.Message{Command: config.REQ_REVIVE}
 
 		} else if input == "exit" {
 			close(close_ch)
