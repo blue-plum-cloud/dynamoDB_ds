@@ -53,7 +53,7 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 					n.reconcile(n.data[msg.Key], msg.ObjData)
 					fmt.Println(msg.Key)
 					n.client_ch <- Message{Command: config.ACK, Key: msg.Key, Data: n.data[msg.Key].data, SrcID: n.GetID()}
-				} else if n.numReads < config.R {
+				} else {
 					n.reconcile(n.data[msg.Key], msg.ObjData)
 				}
 				n.numReads++
