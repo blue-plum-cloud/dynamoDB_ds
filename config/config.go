@@ -8,7 +8,8 @@ const (
 	SET_DATA      = 4
 	READ_DATA     = 5
 	READ_DATA_ACK = 6
-	BACK_DATA 	  = 7
+	BACK_DATA     = 7
+	REQ_REVIVE    = 8
 
 	//default values for config struct
 	NUM_NODES  = 10

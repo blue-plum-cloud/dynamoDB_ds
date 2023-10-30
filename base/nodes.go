@@ -10,22 +10,31 @@ import (
 	"time"
 )
 
+/* hijacks Start(), message commands processed is REQ_REVIVE only */
 func (n *Node) busyWait(duration int) {
 	if config.DEBUG_LEVEL >= 1 {
 		fmt.Printf("\nbusyWait: %d killed for %d ms...\n", n.GetID(), duration)
 	}
-	// `select case <- time.After`` not used, since timeout resets with emptying channel
 	reviveTime := time.Now().Add(time.Millisecond * time.Duration(duration))
 	
 	for {
-		if time.Since(reviveTime) < 0 {
-			<- n.rcv_ch
-			continue
-		} else {
-			if config.DEBUG_LEVEL >= 1 {
-				fmt.Printf("\nbusyWait: %d reviving...\n", n.GetID())
-			}
-			return
+		select {
+			case msg := <- n.rcv_ch: // consume rcv_ch and throw
+				if msg.Command == config.REQ_REVIVE {
+					if config.DEBUG_LEVEL >= 1 {
+						fmt.Printf("\nbusyWait: %d reviving...\n", n.GetID())
+					}
+					return
+				}
+
+			case <- time.After(10*time.Millisecond): // check in intervals of 10ms
+				if time.Since(reviveTime) >= 0 {
+					if config.DEBUG_LEVEL >= 1 {
+						fmt.Printf("\nbusyWait: %d reviving...\n", n.GetID())
+					}
+					return
+				}
+			
 		}
 	}
 }
@@ -42,14 +51,14 @@ func (n *Node) restoreHandoff(token *Token, msg Message, c *Config) {
 
 	for {
 		if !(n.awaitAck[token.phy_id].Load()) {
-			if c.DEBUG_LEVEL >= 2 {
+			if config.DEBUG_LEVEL >= 2 {
 				fmt.Printf("restoreHandoff: %d->%d complete.\n", n.GetID(), token.phy_id)
 			}
 			delete(n.backup, token.phy_id)
 			return
 		}
-		if time.Since(reqTime) > config.SET_DATA_TIMEOUT_MS * 1e6 {
-			if c.DEBUG_LEVEL >= 1 {
+		if time.Since(reqTime) > time.Duration(config.SET_DATA_TIMEOUT_MS) * time.Millisecond {
+			if config.DEBUG_LEVEL >= 2 {
 				fmt.Printf("restoreHandoff: %d->%d timeout reached. Retrying...\n", n.GetID(), token.phy_id)
 			}
 			n.channels[token.phy_id] <- msg
@@ -196,13 +205,13 @@ func (n *Node) updateToken(token *Token, msg Message, c *Config) bool {
 
 	for {
 		if !(n.awaitAck[token.phy_id].Load()) {
-			if c.DEBUG_LEVEL >= 2 {
+			if config.DEBUG_LEVEL >= 2 {
 				fmt.Printf("updateToken: Replicated to token=%d, node=%d\n", token.GetID(), token.phy_id)
 			}
 			return true
 		}
-		if time.Since(reqTime) > c.SET_DATA_TIMEOUT_MS * 1e6 {
-			if c.DEBUG_LEVEL >= 1 {
+		if time.Since(reqTime) > time.Duration(c.SET_DATA_TIMEOUT_MS) * time.Millisecond {
+			if config.DEBUG_LEVEL >= 3 {
 				fmt.Printf("updateToken: %d->%d timeout reached.\n", n.GetID(), token.phy_id)
 			}
 			return false
@@ -236,7 +245,7 @@ func (n *Node) Put(key string, value string, nValue []int, c *Config) {
 	n.increment_vclk()
 	copy_vclk := n.copy_vclk()
 
-	if c.DEBUG_LEVEL >= 1 {
+	if config.DEBUG_LEVEL >= 1 {
 		fmt.Printf("Put: Coordinator node = %d, responsible for hashkey = %032X, replicationCount %d\n", n.GetID(), hashKey, replicationCount)
 	}
 
@@ -314,7 +323,7 @@ func (n *Node) requestTreeNodeData(curToken *Token, hashKey string, c *Config) *
 			return resp.ObjData
 		}
 
-		if time.Since(reqTime) > time.Duration(c.SET_DATA_TIMEOUT_MS)*time.Millisecond {
+		if time.Since(reqTime) > time.Duration(c.SET_DATA_TIMEOUT_MS) * time.Millisecond {
 			fmt.Printf("node %d: request node %d timeout reached.\n", n.GetID(), curToken.phy_id)
 			break
 		}
