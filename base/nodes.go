@@ -64,6 +64,22 @@ func getReplicationCount(nValue []int) int {
 	return replicationCount
 }
 
+func getWCount(nValue []int) int {
+	wCount := 0
+	if len(nValue) == 0 {
+		wCount = config.W
+	} else {
+		if nValue[3] > 0 {
+			wCount = nValue[3]
+		}
+
+		if nValue[3] > nValue[1] {
+			wCount = nValue[1]
+		}
+	}
+	return wCount
+}
+
 /* Finds N+1-th available physical node from current node */
 func (n *Node) getHintedHandoffToken(initNode *TreeNode, visitedNodes map[int]struct{}, replicationCount int) *Token {
 	i := replicationCount
@@ -129,9 +145,14 @@ func (n *Node) GetChannel() chan Message {
 }
 
 // internal function
-// Pass in global config details (ReplicationNum, PhysicalNum, VirtualNum)
+// Pass in global config details (ReplicationNum, PhysicalNum, VirtualNum, W)
+// Can refactor in the future to use dict instead so we know what are the key and value
+// rather than accessing it by index which we not sure which correspond to which
 func (n *Node) Put(key string, value string, nValue []int) {
 	replicationCount := getReplicationCount(nValue)
+
+	// TODO: use this when sir Ian adjust the test case for args in nValue
+	// W := getWCount(nValue)
 
 	hashKey := computeMD5(key)
 	n.increment_vclk()
@@ -172,6 +193,7 @@ func (n *Node) Put(key string, value string, nValue []int) {
 			n.updateToken(curToken, visitedNodes, msg)
 		}
 
+		// Change the config.W with W when the test case is adjusted accordingly
 		if len(visitedNodes) == config.W {
 			n.client_ch <- Message{Command: config.ACK, Key: key, SrcID: n.GetID()}
 		}
