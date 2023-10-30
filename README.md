@@ -12,4 +12,6 @@ Use command `go test ./tests` to run tests. For verbose output, use flag `-v`.
 
 To run single test, use flag `-run <testname>`
 
+To clear test cache, use `go clean -testcache`
+
 Detailed description about the tests can be found at [`./tests/TESTS.md`](./tests/TESTS.md)

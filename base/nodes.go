@@ -64,7 +64,7 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 	}
 }
 
-/* Get Replication count for testing */
+/* Get Replication count */
 func getReplicationCount(nValue []int) int {
 	replicationCount := 0
 	if len(nValue) == 0 {
