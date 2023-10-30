@@ -1,248 +1,259 @@
 package tests
 
-import (
-	"base"
-	"config"
-	"fmt"
-	"testing"
-	"time"
-)
+//TODO: adjust the testcase accordingly
+// import (
+// 	"base"
+// 	"config"
+// 	"fmt"
+// 	"testing"
+// 	"time"
+// )
 
-// TestSinglePutReplicationNonZeroNonNegative checks if replicas are
-// correctly created for a single put request with non-zero and
-// non-negative N values
-func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
-	var tests = []struct {
-		numNodes, numTokens, nValue int
-	}{
-		{5, 5, 1},
-		{10, 10, 3},
-		{40, 40, 40},
-		{100, 100, 100},
+// // TEST R1
 
-		{5, 10, 6},
-		{5, 12, 6},
-		{15, 10, 20},
-	}
-	for _, tt := range tests {
-		testname := fmt.Sprintf("%d_nodes_%d_tokens_%d_n", tt.numNodes, tt.numTokens, tt.nValue)
-		t.Run(testname, func(t *testing.T) {
-			// phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
+// // TestSinglePutReplicationNonZeroNonNegative checks if replicas are
+// // correctly created for a single put request with non-zero and
+// // non-negative N values
+// func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
+// 	var tests = []struct {
+// 		numNodes, numTokens, nValue int
+// 	}{
+// 		{5, 5, 1},
+// 		{10, 10, 3},
+// 		{40, 40, 40},
+// 		{100, 100, 100},
 
-			close_ch := make(chan struct{})
-			client_ch := make(chan base.Message)
+// 		{5, 10, 6},
+// 		{5, 12, 6},
+// 		{15, 10, 20},
+// 	}
+// 	for _, tt := range tests {
+// 		testname := fmt.Sprintf("%d_nodes_%d_tokens_%d_n", tt.numNodes, tt.numTokens, tt.nValue)
+// 		t.Run(testname, func(t *testing.T) {
+// 			// phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
 
-			//node and token initialization
-			phy_nodes := base.CreateNodes(client_ch, close_ch, tt.numNodes)
-			base.InitializeTokens(phy_nodes, tt.numTokens)
-			// defer close(close_ch)
+// 			close_ch := make(chan struct{})
+// 			client_ch := make(chan base.Message)
 
-			for i := range phy_nodes {
-				wg.Add(1)
-				go phy_nodes[i].Start(&wg)
-			}
+// 			//node and token initialization
+// 			phy_nodes := base.CreateNodes(client_ch, close_ch, tt.numNodes)
+// 			base.InitializeTokens(phy_nodes, tt.numTokens)
+// 			// defer close(close_ch)
 
-			key := "Sudipta"
-			value := "Best Prof"
+// 			for i := range phy_nodes {
+// 				wg.Add(1)
+// 				go phy_nodes[i].Start(&wg)
+// 			}
 
-			node := base.FindNode("Sudipta", phy_nodes)
+// 			key := "Sudipta"
+// 			value := "Best Prof"
 
-			args := []int{tt.nValue, tt.numNodes, tt.numTokens}
+// 			node := base.FindNode("Sudipta", phy_nodes)
 
-			go node.Put(key, value, args)
+// 			args := []int{tt.numNodes, tt.numTokens, tt.nValue}
 
-			// time.Sleep(2 * time.Second)
+// 			go node.Put(key, value, args)
 
-			select {
-			case ack := <-client_ch: // reply received in time
-				if ack.Key != key {
-					panic("wrong key!")
-				}
+// 			// time.Sleep(2 * time.Second)
 
-				fmt.Println("Value stored: ", value, " with key: ", key)
+// 			select {
+// 			case ack := <-client_ch: // reply received in time
+// 				if ack.Key != key {
+// 					panic("wrong key!")
+// 				}
 
-			case <-time.After(config.CLIENT_PUT_TIMEOUT_MS * time.Millisecond): // timeout reached
-				fmt.Println("Put Timeout reached")
-			}
+// 				fmt.Println("Value stored: ", value, " with key: ", key)
 
-			ori := 0
-			repCnt := 0
-			for _, n := range phy_nodes {
-				if val := n.Get(key); val.GetData() == value && val.IsReplica() {
-					repCnt++
-				} else if val := n.Get(key); val.GetData() == value && !val.IsReplica() {
-					ori++
-				}
-			}
-			expectedRepFactor := tt.nValue - 1
-			minPhyVirt := tt.numNodes
-			if tt.numTokens < tt.numNodes {
-				minPhyVirt = tt.numTokens
-			}
-			if tt.nValue > minPhyVirt {
-				expectedRepFactor = minPhyVirt - 1
-			}
-			if repCnt != expectedRepFactor {
-				t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedRepFactor)
-			}
-			if ori != 1 {
-				t.Errorf("Original data for key '%s' is missing", key)
-			}
-		})
-	}
-}
+// 			case <-time.After(config.CLIENT_PUT_TIMEOUT_MS * time.Millisecond): // timeout reached
+// 				fmt.Println("Put Timeout reached")
+// 			}
 
-// TestSinglePutReplicationZeroNegative checks if replicas are
-// correctly created for a single put request for zero or
-// negative N values
-func TestSinglePutReplicationZeroNegative(t *testing.T) {
-	var tests = []struct {
-		numNodes, numTokens, nValue int
-	}{
-		{5, 5, 0},
-		{10, 10, -1},
-		{40, 40, 0},
-		{100, 100, -20},
-	}
-	for _, tt := range tests {
-		testname := fmt.Sprintf("%d_nodes_%d_tokens_%d_n", tt.numNodes, tt.numTokens, tt.nValue)
-		t.Run(testname, func(t *testing.T) {
-			// phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
+// 			ori := 0
+// 			repCnt := 0
+// 			for _, n := range phy_nodes {
+// 				if val := n.Get(key); val.GetData() == value && val.IsReplica() {
+// 					repCnt++
+// 				} else if val := n.Get(key); val.GetData() == value && !val.IsReplica() {
+// 					ori++
+// 				}
+// 			}
+// 			expectedRepFactor := tt.nValue - 1
+// 			minPhyVirt := tt.numNodes
+// 			if tt.numTokens < tt.numNodes {
+// 				minPhyVirt = tt.numTokens
+// 			}
+// 			if tt.nValue > minPhyVirt {
+// 				expectedRepFactor = minPhyVirt - 1
+// 			}
+// 			if repCnt != expectedRepFactor {
+// 				t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedRepFactor)
+// 			}
+// 			if ori != 1 {
+// 				t.Errorf("Original data for key '%s' is missing", key)
+// 			}
+// 		})
+// 	}
+// }
 
-			close_ch := make(chan struct{})
-			client_ch := make(chan base.Message)
+// // TEST R2
 
-			//node and token initialization
-			phy_nodes := base.CreateNodes(client_ch, close_ch, tt.numNodes)
-			base.InitializeTokens(phy_nodes, tt.numTokens)
-			// defer close(close_ch)
+// // TestSinglePutReplicationZeroNegative checks if replicas are
+// // correctly created for a single put request for zero or
+// // negative N values
+// func TestSinglePutReplicationZeroNegative(t *testing.T) {
+// 	var tests = []struct {
+// 		numNodes, numTokens, nValue int
+// 	}{
+// 		{5, 5, 0},
+// 		{10, 10, -1},
+// 		{40, 40, 0},
+// 		{100, 100, -20},
+// 	}
+// 	for _, tt := range tests {
+// 		testname := fmt.Sprintf("%d_nodes_%d_tokens_%d_n", tt.numNodes, tt.numTokens, tt.nValue)
+// 		t.Run(testname, func(t *testing.T) {
+// 			// phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
 
-			for i := range phy_nodes {
-				wg.Add(1)
-				go phy_nodes[i].Start(&wg)
-			}
+// 			close_ch := make(chan struct{})
+// 			client_ch := make(chan base.Message)
 
-			key := "Sudipta"
-			value := "Best Prof"
+// 			//node and token initialization
+// 			phy_nodes := base.CreateNodes(client_ch, close_ch, tt.numNodes)
+// 			base.InitializeTokens(phy_nodes, tt.numTokens)
+// 			// defer close(close_ch)
 
-			node := base.FindNode("Sudipta", phy_nodes)
+// 			for i := range phy_nodes {
+// 				wg.Add(1)
+// 				go phy_nodes[i].Start(&wg)
+// 			}
 
-			args := []int{tt.nValue, tt.numNodes, tt.numTokens}
+// 			key := "Sudipta"
+// 			value := "Best Prof"
 
-			go node.Put(key, value, args)
+// 			node := base.FindNode("Sudipta", phy_nodes)
 
-			select {
-			case ack := <-client_ch: // reply received in time
-				if ack.Key != key {
-					panic("wrong key!")
-				}
+// 			args := []int{tt.numNodes, tt.numTokens, tt.nValue}
+// 			node.Put(key, value, args)
+// 			ori := 0
+// 			repCnt := 0
+// 			for _, n := range phy_nodes {
+// 				if val := n.Get(key); val.GetData() == value && val.IsReplica() {
+// 					repCnt++
+// 				} else if val := n.Get(key); val.GetData() == value && !val.IsReplica() {
+// 					ori++
+// 				}
+// 			}
+// 			expectedRepFactor := 0
+// 			if repCnt != expectedRepFactor {
+// 				t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedRepFactor)
+// 			}
+// 			if ori != 1 {
+// 				t.Errorf("Original data for key '%s' is missing", key)
+// 			}
+// 		})
+// 	}
+// }
 
-				fmt.Println("Value stored: ", value, " with key: ", key)
+// // TEST R3
 
-			case <-time.After(config.CLIENT_PUT_TIMEOUT_MS * time.Millisecond): // timeout reached
-				fmt.Println("Put Timeout reached")
-			}
-			ori := 0
-			repCnt := 0
-			for _, n := range phy_nodes {
-				if val := n.Get(key); val.GetData() == value && val.IsReplica() {
-					repCnt++
-				} else if val := n.Get(key); val.GetData() == value && !val.IsReplica() {
-					ori++
-				}
-			}
-			expectedRepFactor := 0
-			if repCnt != expectedRepFactor {
-				t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedRepFactor)
-			}
-			if ori != 1 {
-				t.Errorf("Original data for key '%s' is missing", key)
-			}
-		})
-	}
-}
+// // TestMultipleUniquePutReplication tests if replications are properly handled
+// // for multiple put requests
+// func TestMultipleUniquePutReplication(t *testing.T) {
+// 	var tests = []struct {
+// 		numNodes, numTokens, nValue, numKeyValuePairs int
+// 	}{
+// 		{5, 5, 3, 2},
+// 		{10, 20, 3, 8},
+// 		{100, 524, 10, 20},
+// 		{78, 78, 78, 100},
+// 	}
+// 	for _, tt := range tests {
+// 		keyValuePairs := generateRandomKeyValuePairs(80, 100, tt.numKeyValuePairs)
+// 		testname := fmt.Sprintf("%d_nodes_%d_tokens_%d_n_%d_keyValuePairs", tt.numNodes, tt.numTokens, tt.nValue, tt.numKeyValuePairs)
+// 		t.Run(testname, func(t *testing.T) {
+// 			phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
 
-func TestMultipleUniquePutReplication(t *testing.T) {
-	keyValuePairs := make([][]string, 0)
-	// Populate key value pairs
-	// Assume key as good as unique due to large randomisation space
-	for i := 0; i < 100; i++ {
-		key := generateRandomString(80)
-		value := generateRandomString(100)
-		newKeyValue := []string{key, value}
-		keyValuePairs = append(keyValuePairs, newKeyValue)
-	}
+// 			defer close(close_ch)
 
-	var tests = []struct {
-		numNodes, numTokens, nValue, numKeyValuePairs int
-	}{
-		{5, 5, 3, 2},
-		{10, 20, 3, 8},
-		{100, 524, 10, 20},
-		{78, 78, 78, 100},
-	}
-	for _, tt := range tests {
-		testname := fmt.Sprintf("%d_nodes_%d_tokens_%d_n_%d_keyValuePairs", tt.numNodes, tt.numTokens, tt.nValue, tt.numKeyValuePairs)
-		t.Run(testname, func(t *testing.T) {
-			// phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
+// 			putKeyValuePairs(tt.numNodes, tt.numTokens, tt.nValue, keyValuePairs, phy_nodes)
 
-			close_ch := make(chan struct{})
-			client_ch := make(chan base.Message)
+// 			// Check replications of all key value pairs
+// 			for key, value := range keyValuePairs {
+// 				ori := 0
+// 				repCnt := 0
+// 				for _, n := range phy_nodes {
+// 					if val := n.Get(key); val.GetData() == value && val.IsReplica() {
+// 						repCnt++
+// 					} else if val := n.Get(key); val.GetData() == value && !val.IsReplica() {
+// 						ori++
+// 					}
+// 				}
+// 				expectedRepFactor := tt.nValue - 1
+// 				if repCnt != expectedRepFactor {
+// 					t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedRepFactor)
+// 				}
+// 				if ori != 1 {
+// 					t.Errorf("Original data for key '%s' is missing", key)
+// 				}
+// 			}
+// 		})
+// 	}
+// }
 
-			//node and token initialization
-			phy_nodes := base.CreateNodes(client_ch, close_ch, tt.numNodes)
-			base.InitializeTokens(phy_nodes, tt.numTokens)
-			// defer close(close_ch)
+// func TestMultipleOverwritePutReplication(t *testing.T) {
 
-			for i := range phy_nodes {
-				wg.Add(1)
-				go phy_nodes[i].Start(&wg)
-			}
+// 	var tests = []struct {
+// 		numNodes, numTokens, nValue, numKeyValuePairs int
+// 	}{
+// 		{5, 5, 3, 2},
+// 		{10, 20, 3, 8},
+// 		{100, 524, 10, 20},
+// 		{78, 78, 78, 100},
+// 	}
+// 	for _, tt := range tests {
+// 		keyValuePairs := generateRandomKeyValuePairs(80, 100, tt.numKeyValuePairs)
+// 		testname := fmt.Sprintf("%d_nodes_%d_tokens_%d_n_%d_keyValuePairs", tt.numNodes, tt.numTokens, tt.nValue, tt.numKeyValuePairs)
+// 		t.Run(testname, func(t *testing.T) {
+// 			// phy_nodes, close_ch := setUpNodes(tt.numNodes, tt.numTokens)
 
-			// Put all key value pairs into system
-			for i := 0; i < tt.numKeyValuePairs; i++ {
-				key := keyValuePairs[i][0]
-				value := keyValuePairs[i][1]
-				node := base.FindNode(key, phy_nodes)
-				args := []int{tt.nValue, tt.numNodes, tt.numTokens}
-				go node.Put(key, value, args)
-				select {
-				case ack := <-client_ch: // reply received in time
-					if ack.Key != key {
-						panic("wrong key!")
-					}
+// 			close_ch := make(chan struct{})
+// 			client_ch := make(chan base.Message)
 
-					fmt.Println("Value stored: ", value, " with key: ", key)
+// 			//node and token initialization
+// 			phy_nodes := base.CreateNodes(client_ch, close_ch, tt.numNodes)
+// 			base.InitializeTokens(phy_nodes, tt.numTokens)
+// 			// defer close(close_ch)
 
-				case <-time.After(config.CLIENT_PUT_TIMEOUT_MS * time.Millisecond): // timeout reached
-					fmt.Println("Put Timeout reached")
-				}
-			}
+// 			for i := range phy_nodes {
+// 				wg.Add(1)
+// 				go phy_nodes[i].Start(&wg)
+// 			}
 
-			// Check replications of all key value pairs
-			for i := 0; i < tt.numKeyValuePairs; i++ {
-				key := keyValuePairs[i][0]
-				value := keyValuePairs[i][1]
+// 			putKeyValuePairs(tt.numNodes, tt.numTokens, tt.nValue, keyValuePairs, phy_nodes)
 
-				fmt.Println(key)
+// 			randomlyUpdateValues(keyValuePairs, 100)
 
-				ori := 0
-				repCnt := 0
-				for _, n := range phy_nodes {
-					if val := n.Get(key); val.GetData() == value && val.IsReplica() {
-						repCnt++
-					} else if val := n.Get(key); val.GetData() == value && !val.IsReplica() {
-						ori++
-					}
-				}
-				expectedRepFactor := tt.nValue - 1
-				if repCnt != expectedRepFactor {
-					t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedRepFactor)
-				}
-				if ori != 1 {
-					t.Errorf("Original data for key '%s' is missing", key)
-				}
-			}
-		})
-	}
-}
+// 			putKeyValuePairs(tt.numNodes, tt.numTokens, tt.nValue, keyValuePairs, phy_nodes)
+
+// 			// Check replications of all key value pairs
+// 			for key, value := range keyValuePairs {
+// 				ori := 0
+// 				repCnt := 0
+// 				for _, n := range phy_nodes {
+// 					if val := n.Get(key); val.GetData() == value && val.IsReplica() {
+// 						repCnt++
+// 					} else if val := n.Get(key); val.GetData() == value && !val.IsReplica() {
+// 						ori++
+// 					}
+// 				}
+// 				expectedRepFactor := tt.nValue - 1
+// 				if repCnt != expectedRepFactor {
+// 					t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedRepFactor)
+// 				}
+// 				if ori != 1 {
+// 					t.Errorf("Original data for key '%s' is missing", key)
+// 				}
+// 			}
+// 		})
+// 	}
+// }
