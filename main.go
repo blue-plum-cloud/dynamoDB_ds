@@ -27,8 +27,9 @@ func ParseGetCommand(input string) (string, error) {
 func ListenGetReply(key string, client_ch chan base.Message) {
 	select {
 	case value := <-client_ch: // reply received in time
-		if value.Key != key {
-			panic("wrong key!")
+		hashkey := base.ComputeMD5(key)
+		if value.Key != hashkey {
+			panic(fmt.Sprintf("wrong key! expected: %s actual: %s", hashkey, value.Key))
 		}
 
 		if value.Data != "" {
@@ -47,8 +48,8 @@ func ListenGetReply(key string, client_ch chan base.Message) {
 
 func clearChannel(ch chan base.Message) {
 	for {
-		select{
-		case <- ch:
+		select {
+		case <-ch:
 		default:
 			return
 		}

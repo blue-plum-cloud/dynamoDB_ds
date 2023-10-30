@@ -36,7 +36,7 @@ func TestNoUpdateGetPut(t *testing.T) {
 
 			for key, value := range keyValuePairs {
 				node := base.FindNode(key, phy_nodes)
-				actual := node.Get(key).GetData()
+				actual := node.GetData(base.ComputeMD5(key)).GetData()
 
 				if actual != value {
 					t.Errorf("got: %s, expected: %s", actual, value)
@@ -82,7 +82,7 @@ func TestMultipleGetPut(t *testing.T) {
 
 			for key, value := range keyValuePairs {
 				node := base.FindNode(key, phy_nodes)
-				actual := node.Get(key).GetData()
+				actual := node.GetData(base.ComputeMD5(key)).GetData()
 
 				if actual != value {
 					t.Errorf("got: %s, expected: %s", actual, value)

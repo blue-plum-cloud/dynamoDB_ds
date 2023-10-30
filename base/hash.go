@@ -11,7 +11,7 @@ import (
 
 // Function to compute the MD5 hash of a string
 // use hash as a string mainly for convenience
-func computeMD5(data string) string {
+func ComputeMD5(data string) string {
 	hash := md5.Sum([]byte(data))
 	return hex.EncodeToString(hash[:])
 }
