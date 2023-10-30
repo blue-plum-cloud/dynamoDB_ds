@@ -153,7 +153,7 @@ func (n *Node) updateToken(token *Token, visitedNodes map[int]struct{}, msg Mess
 			}
 			break
 		}
-		if time.Since(reqTime) > time.Duration(c.SET_DATA_TIMEOUT_NS) {
+		if time.Since(reqTime) > time.Duration(c.SET_DATA_TIMEOUT_NS)*time.Nanosecond {
 			fmt.Printf("node %d: update node %d timeout reached.\n", n.GetID(), token.phy_id)
 			// TODO: hinted handoff to N+1-th physical node from current node
 			break

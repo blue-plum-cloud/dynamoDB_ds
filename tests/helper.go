@@ -11,26 +11,6 @@ import (
 ======= Helper functions
 */
 
-func setupNodes(sys_config *base.Config) ([]*base.Node, chan struct{}) {
-	var wg sync.WaitGroup
-	numNodes := 5
-	numTokens := 5
-	//create close_ch for goroutines
-	close_ch := make(chan struct{})
-	client_ch := make(chan base.Message)
-
-	//node and token initialization
-	phy_nodes := base.CreateNodes(client_ch, close_ch, numNodes)
-	base.InitializeTokens(phy_nodes, numTokens)
-	fmt.Println("Setup nodes completed..")
-	for i := range phy_nodes {
-		wg.Add(1)
-		go phy_nodes[i].Start(&wg, sys_config)
-	}
-
-	return phy_nodes, close_ch
-}
-
 func setUpNodes(sys_config *base.Config) ([]*base.Node, chan struct{}) {
 
 	var wg sync.WaitGroup
