@@ -27,19 +27,32 @@ func ParseGetCommand(input string) (string, error) {
 func ListenGetReply(key string, client_ch chan base.Message) {
 	select {
 	case value := <-client_ch: // reply received in time
-		if value.Key != key {
-			panic("wrong key!")
+		hashkey := base.ComputeMD5(key)
+		if value.Key != hashkey {
+			panic(fmt.Sprintf("wrong key! expected: %s actual: %s", hashkey, value.Key))
 		}
 
-		//i'm sure there's a better way here
 		if value.Data != "" {
-			fmt.Println("value is: ", value.Data)
+			fmt.Println("Value is: ", value.Data)
+			//clear remaining messages in the channel after processing the first msg
+			clearChannel(client_ch)
 		} else {
-			fmt.Println("data not found!")
+			fmt.Println("Data not found!")
 		}
 
-	case <-time.After(config.CLIENT_GET_TIMEOUT_MS * time.Millisecond): // timeout reached
+	case <-time.After(config.CLIENT_GET_TIMEOUT_MS * time.Millisecond): // timeout
 		fmt.Println("Get Timeout reached")
+	}
+
+}
+
+func clearChannel(ch chan base.Message) {
+	for {
+		select {
+		case <-ch:
+		default:
+			return
+		}
 	}
 }
 
@@ -113,6 +126,8 @@ func main() {
 			node := base.FindNode(key, phy_nodes)
 			channel := (*node).GetChannel()
 			channel <- base.Message{Key: key, Command: config.REQ_READ}
+
+			fmt.Printf("Getting key --> %s in main.go\n", key)
 
 			ListenGetReply(key, client_ch)
 

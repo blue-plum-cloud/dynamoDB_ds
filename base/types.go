@@ -65,10 +65,21 @@ type Node struct {
 	awaitAck    map[int](*atomic.Bool) // flags to check on timeout routines
 	tokenStruct BST
 	aliveSince  time.Time
+
+	//state machine for Get()
+	numReads       int
+	timeoutCounter int
 }
 
 func (n *Node) GetTokens() []*Token {
 	return n.tokens
+}
+func (n *Node) GetData(key string) *Object {
+	obj, exists := n.data[key]
+	if !exists {
+		return &Object{}
+	}
+	return obj
 }
 
 func (n *Node) GetID() int {

@@ -10,6 +10,10 @@ import (
 
 func (n *Node) Start(wg *sync.WaitGroup) {
 	defer wg.Done()
+
+	//put timer
+	getTimer := time.NewTimer(config.CLIENT_GET_TIMEOUT_MS)
+	getTimer.Stop()
 	for {
 		select {
 		case <-n.close_ch:
@@ -17,28 +21,57 @@ func (n *Node) Start(wg *sync.WaitGroup) {
 			return
 
 		case msg := <-n.rcv_ch:
-			if msg.Command == config.REQ_READ {
-				obj := n.Get(msg.Key)
-				n.client_ch <- Message{Command: config.ACK, Key: msg.Key, Data: obj.GetData(), SrcID: n.GetID()}
+			switch msg.Command {
+			case config.REQ_READ:
+				n.Get(msg.Key)
+				// n.client_ch <- Message{Command: config.ACK, Key: msg.Key, Data: obj.GetData(), SrcID: n.GetID()}
 
-			} else if msg.Command == config.REQ_WRITE {
+			case config.REQ_WRITE:
 				args := []int{config.N, config.NUM_NODES, config.NUM_TOKENS}
 				go n.Put(msg.Key, msg.Data, args)
 
-			} else if msg.Command == config.SET_DATA {
+			case config.SET_DATA:
 				if config.DEBUG_LEVEL >= 1 {
 					fmt.Printf("Start: %d->%d SET_DATA, message info: key=%s, object=(%s)\n", msg.SrcID, n.GetID(), msg.Key, msg.ObjData.ToString())
 				}
 				n.data[msg.Key] = msg.ObjData
 				n.channels[msg.SrcID] <- Message{Command: config.ACK, Key: msg.Key, SrcID: n.GetID()}
 
-			} else if msg.Command == config.ACK {
+			case config.READ_DATA: //coordinator requested to read data, so send it back
+				if config.DEBUG_LEVEL >= 1 {
+					fmt.Printf("Start: %d->%d READ_DATA, message info: key=%s\n", msg.SrcID, n.GetID(), msg.Key)
+				}
+				//return data
+				obj := n.data[msg.Key]
+				n.channels[msg.SrcID] <- Message{Command: config.READ_DATA_ACK, Key: msg.Key, SrcID: n.GetID(), ObjData: obj}
+
+			case config.READ_DATA_ACK:
+				if config.DEBUG_LEVEL >= 1 {
+					fmt.Printf("Start: %d->%d READ_DATA_ACK, message info: key=%s, object=(%s), numReads: %d\n", msg.SrcID, n.GetID(), msg.Key, msg.ObjData.ToString(), n.numReads)
+				}
+				if n.numReads == config.R {
+					n.reconcile(n.data[msg.Key], msg.ObjData)
+					fmt.Println(msg.Key)
+					n.client_ch <- Message{Command: config.ACK, Key: msg.Key, Data: n.data[msg.Key].data, SrcID: n.GetID()}
+				} else {
+					n.reconcile(n.data[msg.Key], msg.ObjData)
+				}
+				n.numReads++
+
+			case config.ACK:
 				if config.DEBUG_LEVEL >= 1 {
 					fmt.Printf("Start: %d->%d ACK received\n", msg.SrcID, n.GetID())
 				}
 				n.awaitAck[msg.SrcID].Store(false)
 
 			}
+
+		case <-getTimer.C:
+			if n.numReads < config.R {
+				fmt.Println("Quorum not fulfilled for get(), get() is failed")
+			}
+			n.numReads = 0
+			getTimer.Reset(config.CLIENT_GET_TIMEOUT_MS)
 		}
 	}
 }
@@ -129,7 +162,7 @@ func (n *Node) updateToken(token *Token, visitedNodes map[int]struct{}, msg Mess
 
 /* Traverses token BST struc, assumed to be consistent across nodes 0 and other nodes */
 func FindNode(key string, phy_nodes []*Node) *Node {
-	hashkey := computeMD5(key)
+	hashkey := ComputeMD5(key)
 	root := phy_nodes[0]
 
 	// bst_node satisfies hashInRange(value, bst_node.Token.GetStartRange(), bst_node.Token.GetEndRange())
@@ -154,7 +187,7 @@ func (n *Node) Put(key string, value string, nValue []int) {
 	// TODO: use this when sir Ian adjust the test case for args in nValue
 	// W := getWCount(nValue)
 
-	hashKey := computeMD5(key)
+	hashKey := ComputeMD5(key)
 	n.increment_vclk()
 	copy_vclk := n.copy_vclk()
 
@@ -200,27 +233,124 @@ func (n *Node) Put(key string, value string, nValue []int) {
 	}
 }
 
-// remember to return object
-// assume MD5 has already been computed
-func (n *Node) Get(key string) *Object {
-	n.increment_vclk()
-	hashKey := computeMD5(key)
-	obj, exists := n.data[hashKey]
-	//reconciliation function here
-	if exists {
-		return obj
+// helper func for GET
+func (n *Node) requestTreeNodeData(curToken *Token, hashKey string) *Object {
+	if _, exists := n.awaitAck[curToken.phy_id]; !exists {
+		n.awaitAck[curToken.phy_id] = new(atomic.Bool)
 	}
 
-	for _, nodeBackup := range n.backup {
-		obj, exists = nodeBackup[hashKey]
-		if exists {
-			return obj
+	n.awaitAck[curToken.phy_id].Store(true)
+	n.channels[curToken.phy_id] <- Message{Command: config.REQ_READ, Key: hashKey, SrcID: n.GetID()}
+	reqTime := time.Now()
+
+	for {
+		if !(n.awaitAck[curToken.phy_id].Load()) {
+			//receive the ACK with data
+			resp := <-n.rcv_ch
+			return resp.ObjData
+		}
+
+		if time.Since(reqTime) > config.SET_DATA_TIMEOUT_NS {
+			fmt.Printf("node %d: request node %d timeout reached.\n", n.GetID(), curToken.phy_id)
+			break
+		}
+	}
+	return nil
+}
+
+// attempt to reconcile original with receiving
+func (n *Node) reconcile(original *Object, replica *Object) {
+	//if 1, means the replica has a strictly greater clock, reconcile.
+	if compareVC(replica.context.v_clk, original.context.v_clk) == 1 {
+		original.data = replica.data
+		original.context = replica.Copy().context
+	}
+	//if 0, means the replica and original have concurrent copies. original keeps its own copy
+	//if -1, means latestObj=objects[0] alrd has the latest clock
+}
+
+// helper func for GET
+// if A -> B, A strictly lesser than B
+func compareVC(a, b []int) int {
+	for i := range a {
+		if a[i] > b[i] {
+			return -1
+		} else if a[i] < b[i] {
+			return 1
+		}
+	}
+	return 0
+}
+
+// internal function GET
+func (n *Node) Get(key string) {
+	n.increment_vclk()
+	hashKey := ComputeMD5(key)
+
+	n.numReads = 1
+
+	curTreeNode := n.tokenStruct.Search(hashKey)
+	initToken := curTreeNode.Token
+	visitedNodes := make(map[int]struct{}) // To keep track of unique physical nodes
+
+	if _, exists := n.data[hashKey]; !exists {
+		return
+	}
+
+	reqCounter := 0
+
+	for reqCounter < config.N {
+		curTreeNode = n.tokenStruct.getNext(curTreeNode)
+		curToken := curTreeNode.Token
+
+		if curToken.GetID() == initToken.GetID() {
+			break
+		}
+
+		if _, visited := visitedNodes[curToken.phy_id]; !visited {
+			n.channels[curToken.phy_id] <- Message{Command: config.READ_DATA, Key: hashKey, SrcID: n.GetID()}
+			visitedNodes[curToken.phy_id] = struct{}{}
+			reqCounter++
 		}
 	}
 
-	newObj := Object{}
-	return &newObj
 }
+
+// func (n *Node) Get_Phase2(key string) *Object {
+// 	reqCounter := 0 //keeps track of outstanding requests
+// 	//wait for R replicas or timeout
+// 	startTime := time.Now()
+// 	retrievedObjects := []*Object{}
+// 	for reqCounter > 0 && time.Since(startTime) < config.CLIENT_GET_TIMEOUT_MS*time.Millisecond {
+// 		select {
+// 		case msg := <-n.rcv_ch:
+// 			if msg.Command == config.ACK && msg.Key == hashKey {
+// 				retrievedObjects = append(retrievedObjects, &Object{data: msg.Data})
+// 				reqCounter--
+// 			}
+// 		default:
+// 			continue
+// 		}
+// 	}
+
+// 	//3. version compare and reconcilation
+// 	finalObject := n.reconcile(retrievedObjects)
+// 	localObj, exists := n.data[hashKey]
+
+// 	if exists && finalObject != localObj {
+// 		fmt.Printf("Key %s found in Node%d \n", key, n.id)
+// 		//if localObj differs from retrived data, compare Vclk
+// 		if compareVC(localObj.context.v_clk, finalObject.context.v_clk) == -1 { //means localObj is newer, use localObj
+// 			finalObject = localObj
+// 			//sync with other nodes function here?
+// 		} else {
+// 			n.data[hashKey] = finalObject
+// 		}
+// 	} else if !exists {
+// 		finalObject = &Object{}
+// 	}
+// 	return finalObject
+// }
 
 func CreateNodes(client_ch chan Message, close_ch chan struct{}, numNodes int) []*Node {
 	fmt.Println("Constructing machines...")
