@@ -148,6 +148,7 @@ func printConfig(c *base.Config) {
 	fmt.Printf("CLIENT_GET_TIMEOUT_MS: %d.\n\n", c.CLIENT_GET_TIMEOUT_MS)
 	fmt.Printf("CLIENT_PUT_TIMEOUT_MS: %d.\n\n", c.CLIENT_PUT_TIMEOUT_MS)
 	fmt.Printf("SET_DATA_TIMEOUT_NS: %d.\n\n", c.SET_DATA_TIMEOUT_NS)
+	fmt.Printf("N: %d, R: %d, W: %d\n\n", c.N, c.R, c.W)
 	fmt.Println("----------------------------------------")
 }
 
