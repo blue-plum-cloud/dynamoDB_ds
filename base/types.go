@@ -7,6 +7,17 @@ import (
 	"time"
 )
 
+type Config struct {
+	NUM_NODES             int
+	NUM_TOKENS            int
+	CLIENT_GET_TIMEOUT_MS int
+	CLIENT_PUT_TIMEOUT_MS int
+	SET_DATA_TIMEOUT_MS   int
+	W                     int
+	R                     int
+	N                     int
+}
+
 /* To properly define message */
 type Message struct {
 	Command int
@@ -67,8 +78,7 @@ type Node struct {
 	aliveSince  time.Time
 
 	//state machine for Get()
-	numReads       int
-	timeoutCounter int
+	numReads int
 }
 
 func (n *Node) GetTokens() []*Token {
