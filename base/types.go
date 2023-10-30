@@ -4,7 +4,6 @@ import (
 	"config"
 	"fmt"
 	"sync/atomic"
-	"time"
 )
 
 type Config struct {
@@ -26,6 +25,8 @@ type Message struct {
 
 	SrcID   int     // for inter-node
 	ObjData *Object // for inter-node
+	
+	HandoffToken *Token // for inter-node
 }
 
 /* Versioning information */
@@ -75,10 +76,13 @@ type Node struct {
 
 	awaitAck    map[int](*atomic.Bool) // flags to check on timeout routines
 	tokenStruct BST
-	aliveSince  time.Time
-
+	
 	//state machine for Get()
 	numReads int
+}
+
+func (n *Node) GetChannel() chan Message {
+	return n.rcv_ch
 }
 
 func (n *Node) GetTokens() []*Token {
@@ -98,14 +102,6 @@ func (n *Node) GetID() int {
 
 func (n *Node) GetTokenStruct() BST {
 	return n.tokenStruct
-}
-
-func (n *Node) GetAliveSince() time.Time {
-	return n.aliveSince
-}
-
-func (n *Node) SetAliveSince(alive time.Time) {
-	n.aliveSince = alive
 }
 
 type Token struct {

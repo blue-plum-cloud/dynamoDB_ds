@@ -3,10 +3,32 @@ package base
 import (
 	"config"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 )
+
+func (n *Node) busyWait(duration int) {
+	if config.DEBUG_LEVEL >= 1 {
+		fmt.Printf("\busyWait: %d killed for %d ms...\n", n.GetID(), duration)
+	}
+	// `select case <- time.After`` not used, since timeout resets with emptying channel
+	reviveTime := time.Now().Add(time.Millisecond * time.Duration(duration))
+	
+	for {
+		if time.Since(reviveTime) < 0 {
+			<- n.rcv_ch
+			continue
+		} else {
+			if config.DEBUG_LEVEL >= 1 {
+				fmt.Printf("\nbusyWait: %d reviving...\n", n.GetID())
+			}
+			return
+		}
+	}
+}
 
 func (n *Node) Start(wg *sync.WaitGroup, c *Config) {
 	defer wg.Done()
@@ -30,6 +52,13 @@ func (n *Node) Start(wg *sync.WaitGroup, c *Config) {
 			case config.REQ_WRITE:
 				args := []int{c.N, c.NUM_NODES, c.NUM_TOKENS}
 				go n.Put(msg.Key, msg.Data, args, c)
+			
+			case config.REQ_KILL:
+				duration, err := strconv.Atoi(strings.TrimSpace(msg.Data))
+				if err != nil {
+					fmt.Printf("REQ_KILL ERROR: %d->%d invalid duration %s, expect integer value denoting milliseconds to kill for.", msg.SrcID, n.GetID(), msg.Data)
+				}
+				n.busyWait(duration) // blocking
 
 			case config.SET_DATA:
 				if config.DEBUG_LEVEL >= 1 {
@@ -172,10 +201,6 @@ func FindNode(key string, phy_nodes []*Node) *Node {
 		panic("node not found due to key being out of range of all tokens")
 	}
 	return phy_nodes[bst_node.Token.phy_id]
-}
-
-func (n *Node) GetChannel() chan Message {
-	return n.rcv_ch
 }
 
 // internal function

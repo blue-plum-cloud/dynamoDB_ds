@@ -81,15 +81,14 @@ func ListenPutReply(key string, value string, client_ch chan base.Message, c *ba
 	}
 }
 
-func ParseKillCommand(input string) (int, int, error) {
+func ParseKillCommand(input string) (int, string, error) {
 	remainder := strings.TrimSuffix(strings.TrimPrefix(input, "kill("), ")")
 	parts := strings.SplitN(remainder, ",", 2)
 	if len(parts) != 2 {
-		return 0, 0, errors.New("Invalid input for kill. Expect kill(int, int)")
+		return 0, "", errors.New("Invalid input for kill. Expect kill(int, int)")
 	}
 	nodeIdx, _ := strconv.Atoi(strings.TrimSpace(parts[0]))
-	duration, _ := strconv.Atoi(strings.TrimSpace(parts[1]))
-	return nodeIdx, duration, nil
+	return nodeIdx, parts[1], nil
 }
 
 func SetConfigs(c *base.Config, reader *bufio.Reader) {
@@ -212,12 +211,9 @@ func main() {
 				continue
 			}
 
-			newAliveSince := time.Now().Add(time.Millisecond * time.Duration(duration))
-			phy_nodes[nodeIdx].SetAliveSince(newAliveSince)
-			if config.DEBUG_LEVEL >= 1 {
-				fmt.Printf("%v\n", time.Now())
-				fmt.Printf("%v\n", phy_nodes[nodeIdx].GetAliveSince())
-			}
+			node := phy_nodes[nodeIdx]
+			channel := (*node).GetChannel()
+			channel <- base.Message{Command: config.REQ_KILL, Data: duration}
 
 		} else if input == "exit" {
 			close(close_ch)
