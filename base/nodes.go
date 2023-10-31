@@ -429,3 +429,11 @@ func (n *Node) copy_vclk() []int {
 func (n *Node) increment_vclk() {
 	n.v_clk[n.id]++
 }
+
+func (n *Node) GetAllData() map[string]*Object {
+	return n.data
+}
+
+func (n *Node) GetAllBackup() map[int]map[string]*Object {
+	return n.backup
+}
