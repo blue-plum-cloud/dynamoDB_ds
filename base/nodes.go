@@ -88,8 +88,7 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 				// n.client_ch <- Message{Command: constants.ACK, Key: msg.Key, Data: obj.GetData(), SrcID: n.GetID()}
 
 			case constants.REQ_WRITE:
-				args := []int{c.N, c.NUM_NODES, c.NUM_TOKENS}
-				go n.Put(msg.Key, msg.Data, args, c)
+				go n.Put(msg.Key, msg.Data, c)
 
 			case constants.REQ_KILL:
 				duration, err := strconv.Atoi(strings.TrimSpace(msg.Data))
@@ -158,38 +157,30 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 }
 
 /* Get Replication count */
-func getReplicationCount(nValue []int, c *config.Config) int {
+func GetReplicationCount(c *config.Config) int {
 	replicationCount := 0
-	if len(nValue) == 0 {
-		replicationCount = c.N
-	} else {
-		if nValue[0] >= 0 {
-			replicationCount = nValue[1]
-			if nValue[2] < nValue[1] {
-				replicationCount = nValue[2]
-			}
-			if nValue[0] < replicationCount {
-				replicationCount = nValue[0]
-			}
-		} else {
-			replicationCount = 0
+
+	if c.N >= 0 {
+		replicationCount = c.NUM_NODES
+		if c.NUM_TOKENS < c.NUM_NODES {
+			replicationCount = c.NUM_TOKENS
+		}
+		if c.N < replicationCount {
+			replicationCount = c.N
 		}
 	}
+
 	return replicationCount
 }
 
-func getWCount(nValue []int, c *config.Config) int {
+func getWCount(c *config.Config) int {
 	wCount := 0
-	if len(nValue) == 0 {
+	if c.W > 0 {
 		wCount = c.W
-	} else {
-		if nValue[3] > 0 {
-			wCount = nValue[3]
-		}
+	}
 
-		if nValue[3] > nValue[1] {
-			wCount = nValue[1]
-		}
+	if c.W > c.NUM_NODES {
+		wCount = c.NUM_NODES
 	}
 	return wCount
 }
@@ -236,8 +227,8 @@ func FindNode(key string, phy_nodes []*Node, c *config.Config) *Node {
 // internal function
 // Can refactor in the future to use dict instead so we know what are the key and value
 // rather than accessing it by index which we not sure which correspond to which
-func (n *Node) Put(key string, value string, nValue []int, c *config.Config) {
-	replicationCount := getReplicationCount(nValue, c)
+func (n *Node) Put(key string, value string, c *config.Config) {
+	replicationCount := GetReplicationCount(c)
 
 	// TODO: use this when sir Ian adjust the test case for args in nValue
 	// W := getWCount(nValue)

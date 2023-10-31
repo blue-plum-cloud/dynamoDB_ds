@@ -2,6 +2,7 @@ package tests
 
 import (
 	"base"
+	"config"
 	"fmt"
 	"math/big"
 	"sort"
@@ -148,4 +149,37 @@ func TestTokenRandomDistribution(t *testing.T) { //extremely low chance numToken
 		t.Errorf("Expected random distribution of tokens, but hash ranges of tokens are still contiguous.\n")
 	}
 
+}
+
+func TestReplicationCount(t *testing.T) {
+	var tests = []struct {
+		N, numNodes, numTokens, expected int
+	}{
+		{3, 3, 3, 3},
+		{4, 3, 3, 3},
+		{3, 4, 3, 3},
+		{3, 3, 4, 3},
+
+		{20, 5, 10, 5},
+		{3, 10, 20, 3},
+
+		{0, 3, 3, 0},
+		{5, 10, 0, 0},
+		{4, 0, 20, 0},
+	}
+	for _, tt := range tests {
+		testname := fmt.Sprintf("%d_N_%d_nodes_%d_tokens", tt.N, tt.numNodes, tt.numTokens)
+		t.Run(testname, func(t *testing.T) {
+
+			c := config.InstantiateConfig()
+			c.N = tt.N
+			c.NUM_NODES = tt.numNodes
+			c.NUM_TOKENS = tt.numTokens
+			actual := base.GetReplicationCount(c)
+
+			if actual != tt.expected {
+				t.Errorf("expected: %d, got: %d", tt.expected, actual)
+			}
+		})
+	}
 }
