@@ -230,7 +230,6 @@ func FindNode(key string, phy_nodes []*Node, c *config.Config) *Node {
 func (n *Node) Put(key string, value string, c *config.Config) {
 	replicationCount := GetReplicationCount(c)
 
-	// TODO: use this when sir Ian adjust the test case for args in nValue
 	W := getWCount(c)
 
 	hashKey := ComputeMD5(key)
@@ -256,7 +255,7 @@ func (n *Node) Put(key string, value string, c *config.Config) {
 		n.client_ch <- Message{Command: constants.ACK, Key: key, SrcID: n.GetID()}
 	}
 
-	successfulReplication := 0
+	successfulReplication := 1
 	for successfulReplication < replicationCount {
 		nextTreeNode := n.tokenStruct.getNext(curTreeNode)
 		curTreeNode = nextTreeNode
