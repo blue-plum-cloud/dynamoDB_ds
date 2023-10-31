@@ -2,6 +2,7 @@ package base
 
 import (
 	"config"
+	"constants"
 	"fmt"
 	"strconv"
 	"strings"
@@ -11,36 +12,36 @@ import (
 )
 
 /* hijacks Start(), message commands processed is REQ_REVIVE only */
-func (n *Node) busyWait(duration int) {
-	if config.DEBUG_LEVEL >= 1 {
+func (n *Node) busyWait(duration int, c *config.Config) {
+	if c.DEBUG_LEVEL >= constants.INFO {
 		fmt.Printf("\nbusyWait: %d killed for %d ms...\n", n.GetID(), duration)
 	}
 	reviveTime := time.Now().Add(time.Millisecond * time.Duration(duration))
-	
+
 	for {
 		select {
-			case msg := <- n.rcv_ch: // consume rcv_ch and throw
-				if msg.Command == config.REQ_REVIVE {
-					if config.DEBUG_LEVEL >= 1 {
-						fmt.Printf("\nbusyWait: %d reviving...\n", n.GetID())
-					}
-					return
+		case msg := <-n.rcv_ch: // consume rcv_ch and throw
+			if msg.Command == constants.REQ_REVIVE {
+				if c.DEBUG_LEVEL >= constants.INFO {
+					fmt.Printf("\nbusyWait: %d reviving...\n", n.GetID())
 				}
+				return
+			}
 
-			case <- time.After(10*time.Millisecond): // check in intervals of 10ms
-				if time.Since(reviveTime) >= 0 {
-					if config.DEBUG_LEVEL >= 1 {
-						fmt.Printf("\nbusyWait: %d reviving...\n", n.GetID())
-					}
-					return
+		case <-time.After(10 * time.Millisecond): // check in intervals of 10ms
+			if time.Since(reviveTime) >= 0 {
+				if c.DEBUG_LEVEL >= constants.INFO {
+					fmt.Printf("\nbusyWait: %d reviving...\n", n.GetID())
 				}
-			
+				return
+			}
+
 		}
 	}
 }
 
 /* Send message to update the node with object, Keeps retrying forever.*/
-func (n *Node) restoreHandoff(token *Token, msg Message, c *Config) {
+func (n *Node) restoreHandoff(token *Token, msg Message, c *config.Config) {
 	if _, exists := n.awaitAck[token.phy_id]; !exists {
 		n.awaitAck[token.phy_id] = new(atomic.Bool)
 	}
@@ -51,14 +52,14 @@ func (n *Node) restoreHandoff(token *Token, msg Message, c *Config) {
 
 	for {
 		if !(n.awaitAck[token.phy_id].Load()) {
-			if config.DEBUG_LEVEL >= 2 {
+			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
 				fmt.Printf("restoreHandoff: %d->%d complete.\n", n.GetID(), token.phy_id)
 			}
 			delete(n.backup, token.phy_id)
 			return
 		}
-		if time.Since(reqTime) > time.Duration(config.SET_DATA_TIMEOUT_MS) * time.Millisecond {
-			if config.DEBUG_LEVEL >= 2 {
+		if time.Since(reqTime) > time.Duration(config.SET_DATA_TIMEOUT_MS)*time.Millisecond {
+			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
 				fmt.Printf("restoreHandoff: %d->%d timeout reached. Retrying...\n", n.GetID(), token.phy_id)
 			}
 			n.channels[token.phy_id] <- msg
@@ -67,11 +68,11 @@ func (n *Node) restoreHandoff(token *Token, msg Message, c *Config) {
 	}
 }
 
-func (n *Node) Start(wg *sync.WaitGroup, c *Config) {
+func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 	defer wg.Done()
 
 	//put timer
-	getTimer := time.NewTimer(config.CLIENT_GET_TIMEOUT_MS)
+	getTimer := time.NewTimer(time.Duration(c.CLIENT_GET_TIMEOUT_MS))
 	getTimer.Stop()
 
 	for {
@@ -82,64 +83,64 @@ func (n *Node) Start(wg *sync.WaitGroup, c *Config) {
 
 		case msg := <-n.rcv_ch:
 			switch msg.Command {
-			case config.REQ_READ:
+			case constants.REQ_READ:
 				n.Get(msg.Key, c)
-				// n.client_ch <- Message{Command: config.ACK, Key: msg.Key, Data: obj.GetData(), SrcID: n.GetID()}
+				// n.client_ch <- Message{Command: constants.ACK, Key: msg.Key, Data: obj.GetData(), SrcID: n.GetID()}
 
-			case config.REQ_WRITE:
+			case constants.REQ_WRITE:
 				args := []int{c.N, c.NUM_NODES, c.NUM_TOKENS}
 				go n.Put(msg.Key, msg.Data, args, c)
-			
-			case config.REQ_KILL:
+
+			case constants.REQ_KILL:
 				duration, err := strconv.Atoi(strings.TrimSpace(msg.Data))
 				if err != nil {
 					fmt.Printf("REQ_KILL ERROR: %d->%d invalid duration %s, expect integer value denoting milliseconds to kill for.", msg.SrcID, n.GetID(), msg.Data)
 				}
-				n.busyWait(duration) // blocking
+				n.busyWait(duration, c) // blocking
 
-			case config.SET_DATA:
-				if config.DEBUG_LEVEL >= 1 {
+			case constants.SET_DATA:
+				if c.DEBUG_LEVEL >= constants.INFO {
 					fmt.Printf("Start: %d->%d SET_DATA, message info: key=%s, object=(%s)\n", msg.SrcID, n.GetID(), msg.Key, msg.ObjData.ToString())
 				}
 				n.data[msg.Key] = msg.ObjData
-				n.channels[msg.SrcID] <- Message{Command: config.ACK, Key: msg.Key, SrcID: n.GetID()}
-			
-			case config.BACK_DATA:
-				if config.DEBUG_LEVEL >= 1 {
+				n.channels[msg.SrcID] <- Message{Command: constants.ACK, Key: msg.Key, SrcID: n.GetID()}
+
+			case constants.BACK_DATA:
+				if c.DEBUG_LEVEL >= 1 {
 					fmt.Printf("Start: %d->%d BACK_DATA, message info: key=%s, object=(%s)\n", msg.SrcID, n.GetID(), msg.Key, msg.ObjData.ToString())
 				}
 				if _, exists := n.backup[msg.SrcID]; !exists {
 					n.backup[msg.SrcID] = make(map[string]*Object)
 				}
 				n.backup[msg.SrcID][msg.Key] = msg.ObjData
-				n.channels[msg.SrcID] <- Message{Command: config.ACK, Key: msg.Key, SrcID: n.GetID()}
-				msg.Command = config.SET_DATA
+				n.channels[msg.SrcID] <- Message{Command: constants.ACK, Key: msg.Key, SrcID: n.GetID()}
+				msg.Command = constants.SET_DATA
 				msg.SrcID = n.GetID()
 				go n.restoreHandoff(msg.HandoffToken, msg, c)
 
-			case config.READ_DATA: //coordinator requested to read data, so send it back
-				if config.DEBUG_LEVEL >= 1 {
+			case constants.READ_DATA: //coordinator requested to read data, so send it back
+				if c.DEBUG_LEVEL >= constants.INFO {
 					fmt.Printf("Start: %d->%d READ_DATA, message info: key=%s\n", msg.SrcID, n.GetID(), msg.Key)
 				}
 				//return data
 				obj := n.data[msg.Key]
-				n.channels[msg.SrcID] <- Message{Command: config.READ_DATA_ACK, Key: msg.Key, SrcID: n.GetID(), ObjData: obj}
+				n.channels[msg.SrcID] <- Message{Command: constants.READ_DATA_ACK, Key: msg.Key, SrcID: n.GetID(), ObjData: obj}
 
-			case config.READ_DATA_ACK:
-				if config.DEBUG_LEVEL >= 1 {
+			case constants.READ_DATA_ACK:
+				if c.DEBUG_LEVEL >= constants.INFO {
 					fmt.Printf("Start: %d->%d READ_DATA_ACK, message info: key=%s, object=(%s), numReads: %d\n", msg.SrcID, n.GetID(), msg.Key, msg.ObjData.ToString(), n.numReads)
 				}
-				if n.numReads == config.R {
+				if n.numReads == c.R {
 					n.reconcile(n.data[msg.Key], msg.ObjData)
 					fmt.Println(msg.Key)
-					n.client_ch <- Message{Command: config.ACK, Key: msg.Key, Data: n.data[msg.Key].data, SrcID: n.GetID()}
+					n.client_ch <- Message{Command: constants.ACK, Key: msg.Key, Data: n.data[msg.Key].data, SrcID: n.GetID()}
 				} else {
 					n.reconcile(n.data[msg.Key], msg.ObjData)
 				}
 				n.numReads++
 
-			case config.ACK:
-				if config.DEBUG_LEVEL >= 1 {
+			case constants.ACK:
+				if c.DEBUG_LEVEL >= constants.INFO {
 					fmt.Printf("Start: %d->%d ACK received\n", msg.SrcID, n.GetID())
 				}
 				n.awaitAck[msg.SrcID].Store(false)
@@ -147,17 +148,17 @@ func (n *Node) Start(wg *sync.WaitGroup, c *Config) {
 			}
 
 		case <-getTimer.C:
-			if n.numReads < config.R {
+			if n.numReads < c.R {
 				fmt.Println("Quorum not fulfilled for get(), get() is failed")
 			}
 			n.numReads = 0
-			getTimer.Reset(config.CLIENT_GET_TIMEOUT_MS)
+			getTimer.Reset(time.Duration(c.CLIENT_GET_TIMEOUT_MS))
 		}
 	}
 }
 
 /* Get Replication count */
-func getReplicationCount(nValue []int, c *Config) int {
+func getReplicationCount(nValue []int, c *config.Config) int {
 	replicationCount := 0
 	if len(nValue) == 0 {
 		replicationCount = c.N
@@ -177,7 +178,7 @@ func getReplicationCount(nValue []int, c *Config) int {
 	return replicationCount
 }
 
-func getWCount(nValue []int, c *Config) int {
+func getWCount(nValue []int, c *config.Config) int {
 	wCount := 0
 	if len(nValue) == 0 {
 		wCount = c.W
@@ -194,7 +195,7 @@ func getWCount(nValue []int, c *Config) int {
 }
 
 /* Send message to update the node with object. Returns True if ACK receive within timeout, False otherwise */
-func (n *Node) updateToken(token *Token, msg Message, c *Config) bool {
+func (n *Node) updateToken(token *Token, msg Message, c *config.Config) bool {
 	if _, exists := n.awaitAck[token.phy_id]; !exists {
 		n.awaitAck[token.phy_id] = new(atomic.Bool)
 	}
@@ -205,13 +206,13 @@ func (n *Node) updateToken(token *Token, msg Message, c *Config) bool {
 
 	for {
 		if !(n.awaitAck[token.phy_id].Load()) {
-			if config.DEBUG_LEVEL >= 2 {
+			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
 				fmt.Printf("updateToken: Replicated to token=%d, node=%d\n", token.GetID(), token.phy_id)
 			}
 			return true
 		}
-		if time.Since(reqTime) > time.Duration(c.SET_DATA_TIMEOUT_MS) * time.Millisecond {
-			if config.DEBUG_LEVEL >= 3 {
+		if time.Since(reqTime) > time.Duration(c.SET_DATA_TIMEOUT_MS)*time.Millisecond {
+			if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
 				fmt.Printf("updateToken: %d->%d timeout reached.\n", n.GetID(), token.phy_id)
 			}
 			return false
@@ -220,12 +221,12 @@ func (n *Node) updateToken(token *Token, msg Message, c *Config) bool {
 }
 
 /* Traverses token BST struc, assumed to be consistent across nodes 0 and other nodes */
-func FindNode(key string, phy_nodes []*Node) *Node {
+func FindNode(key string, phy_nodes []*Node, c *config.Config) *Node {
 	hashkey := ComputeMD5(key)
 	root := phy_nodes[0]
 
 	// bst_node satisfies hashInRange(value, bst_node.Token.GetStartRange(), bst_node.Token.GetEndRange())
-	bst_node := root.tokenStruct.Search(hashkey)
+	bst_node := root.tokenStruct.Search(hashkey, c)
 	if bst_node == nil {
 		panic("node not found due to key being out of range of all tokens")
 	}
@@ -235,7 +236,7 @@ func FindNode(key string, phy_nodes []*Node) *Node {
 // internal function
 // Can refactor in the future to use dict instead so we know what are the key and value
 // rather than accessing it by index which we not sure which correspond to which
-func (n *Node) Put(key string, value string, nValue []int, c *Config) {
+func (n *Node) Put(key string, value string, nValue []int, c *config.Config) {
 	replicationCount := getReplicationCount(nValue, c)
 
 	// TODO: use this when sir Ian adjust the test case for args in nValue
@@ -245,12 +246,12 @@ func (n *Node) Put(key string, value string, nValue []int, c *Config) {
 	n.increment_vclk()
 	copy_vclk := n.copy_vclk()
 
-	if config.DEBUG_LEVEL >= 1 {
+	if c.DEBUG_LEVEL >= constants.INFO {
 		fmt.Printf("Put: Coordinator node = %d, responsible for hashkey = %032X, replicationCount %d\n", n.GetID(), hashKey, replicationCount)
 	}
 
 	// Replication process
-	curTreeNode := n.tokenStruct.Search(hashKey)
+	curTreeNode := n.tokenStruct.Search(hashKey, c)
 	initToken := curTreeNode.Token
 	visitedNodes := make(map[int]struct{}) // To keep track of unique physical nodes. Use map as set. Use struct{} to occupy 0 space
 	handoffQueue := make([]*Token, 0)
@@ -261,7 +262,7 @@ func (n *Node) Put(key string, value string, nValue []int, c *Config) {
 	visitedNodes[initToken.phy_id] = struct{}{}
 
 	if replicationCount == 0 {
-		n.client_ch <- Message{Command: config.ACK, Key: key, SrcID: n.GetID()}
+		n.client_ch <- Message{Command: constants.ACK, Key: key, SrcID: n.GetID()}
 	}
 
 	successfulReplication := 0
@@ -279,13 +280,13 @@ func (n *Node) Put(key string, value string, nValue []int, c *Config) {
 		if _, visited := visitedNodes[curToken.phy_id]; !visited {
 			isHandoff := len(visitedNodes) > replicationCount // counts coordinator node
 			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
-			msg := &Message{Command: config.SET_DATA, Key: hashKey, ObjData: &newObj, SrcID: n.GetID()}
+			msg := &Message{Command: constants.SET_DATA, Key: hashKey, ObjData: &newObj, SrcID: n.GetID()}
 			if isHandoff {
-				msg.Command = config.BACK_DATA
+				msg.Command = constants.BACK_DATA
 				msg.HandoffToken = handoffQueue[0]
 			}
 			updateSuccess := n.updateToken(curToken, *msg, c)
-			
+
 			// fail SET_DATA: add to list of tokens to restore to
 			if !updateSuccess && !isHandoff {
 				handoffQueue = append(handoffQueue, curToken)
@@ -301,19 +302,19 @@ func (n *Node) Put(key string, value string, nValue []int, c *Config) {
 		}
 
 		if successfulReplication == c.W {
-			n.client_ch <- Message{Command: config.ACK, Key: key, SrcID: n.GetID()}
+			n.client_ch <- Message{Command: constants.ACK, Key: key, SrcID: n.GetID()}
 		}
 	}
 }
 
 // helper func for GET
-func (n *Node) requestTreeNodeData(curToken *Token, hashKey string, c *Config) *Object {
+func (n *Node) requestTreeNodeData(curToken *Token, hashKey string, c *config.Config) *Object {
 	if _, exists := n.awaitAck[curToken.phy_id]; !exists {
 		n.awaitAck[curToken.phy_id] = new(atomic.Bool)
 	}
 
 	n.awaitAck[curToken.phy_id].Store(true)
-	n.channels[curToken.phy_id] <- Message{Command: config.REQ_READ, Key: hashKey, SrcID: n.GetID()}
+	n.channels[curToken.phy_id] <- Message{Command: constants.REQ_READ, Key: hashKey, SrcID: n.GetID()}
 	reqTime := time.Now()
 
 	for {
@@ -323,7 +324,7 @@ func (n *Node) requestTreeNodeData(curToken *Token, hashKey string, c *Config) *
 			return resp.ObjData
 		}
 
-		if time.Since(reqTime) > time.Duration(c.SET_DATA_TIMEOUT_MS) * time.Millisecond {
+		if time.Since(reqTime) > time.Duration(c.SET_DATA_TIMEOUT_MS)*time.Millisecond {
 			fmt.Printf("node %d: request node %d timeout reached.\n", n.GetID(), curToken.phy_id)
 			break
 		}
@@ -356,13 +357,13 @@ func compareVC(a, b []int) int {
 }
 
 // internal function GET
-func (n *Node) Get(key string, c *Config) {
+func (n *Node) Get(key string, c *config.Config) {
 	n.increment_vclk()
 	hashKey := ComputeMD5(key)
 
 	n.numReads = 1
 
-	curTreeNode := n.tokenStruct.Search(hashKey)
+	curTreeNode := n.tokenStruct.Search(hashKey, c)
 	initToken := curTreeNode.Token
 	visitedNodes := make(map[int]struct{}) // To keep track of unique physical nodes
 
@@ -381,7 +382,7 @@ func (n *Node) Get(key string, c *Config) {
 		}
 
 		if _, visited := visitedNodes[curToken.phy_id]; !visited {
-			n.channels[curToken.phy_id] <- Message{Command: config.READ_DATA, Key: hashKey, SrcID: n.GetID()}
+			n.channels[curToken.phy_id] <- Message{Command: constants.READ_DATA, Key: hashKey, SrcID: n.GetID()}
 			visitedNodes[curToken.phy_id] = struct{}{}
 			reqCounter++
 		}
@@ -389,9 +390,10 @@ func (n *Node) Get(key string, c *Config) {
 
 }
 
-func CreateNodes(client_ch chan Message, close_ch chan struct{}, numNodes int) []*Node {
+func CreateNodes(client_ch chan Message, close_ch chan struct{}, c *config.Config) []*Node {
 	fmt.Println("Constructing machines...")
 
+	numNodes := c.NUM_NODES
 	var nodeGroup []*Node
 	for j := 0; j < numNodes; j++ {
 

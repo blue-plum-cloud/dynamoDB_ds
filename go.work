@@ -4,4 +4,5 @@ use (
 	./base
 	./tests
 	./config
+	./constants
 )
