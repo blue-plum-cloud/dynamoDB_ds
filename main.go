@@ -230,7 +230,27 @@ func main() {
 		} else if input == "exit" {
 			close(close_ch)
 			break
-
+		} else if strings.HasPrefix(input, "status") {
+			fmt.Println("====== STATUS ======")
+			for _, node := range phy_nodes {
+				tokens := []int{}
+				for _, token := range node.GetTokens() {
+					tokens = append(tokens, token.GetID())
+				}
+				fmt.Printf("[Node %d] | Token(s): %v\n", node.GetID(), tokens)
+				fmt.Println("> DATA")
+				for key, value := range node.GetAllData() {
+					fmt.Printf("	[%s] %s\n", key, value.ToString())
+				}
+				fmt.Println("> BACKUPS")
+				for nodeId, value := range node.GetAllBackup() {
+					fmt.Printf("Backup for node %d", nodeId)
+					for key, valueObj := range value {
+						fmt.Printf("	[%s] %s\n", key, valueObj.ToString())
+					}
+				}
+				fmt.Println("===============")
+			}
 		} else {
 			fmt.Println("Invalid input. Expected get(string), put(string, string) or exit")
 		}
