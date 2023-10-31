@@ -10,50 +10,83 @@ import (
 )
 
 func TestNodeCreation(t *testing.T) {
-	close_ch := make(chan struct{})
-	num := 5
-	client_ch := make(chan base.Message)
+	var tests = []struct {
+		numNodes int
+	}{
+		{0},
+		{5},
+		{8},
+		{200},
+		{1000},
+	}
+	for _, tt := range tests {
+		testname := fmt.Sprintf("%d_nodes", tt.numNodes)
+		t.Run(testname, func(t *testing.T) {
+			close_ch := make(chan struct{})
+			client_ch := make(chan base.Message)
+			c := config.InstantiateConfig()
+			c.NUM_NODES = tt.numNodes
 
-	//node and token initialization
-	nodes := base.CreateNodes(client_ch, close_ch, num)
-	numNodes := len(nodes)
-	expected := 5
-	if numNodes != expected {
-		t.Errorf("Expected %d, but got %d", expected, numNodes)
+			//node and token initialization
+			nodes := base.CreateNodes(client_ch, close_ch, &c)
+			numNodes := len(nodes)
+
+			if numNodes != tt.numNodes {
+				t.Errorf("expected: %d, got: %d", tt.numNodes, numNodes)
+			}
+		})
 	}
 }
 
 func TestTokenCreation(t *testing.T) {
-	close_ch := make(chan struct{})
-	num := 5
-	client_ch := make(chan base.Message)
-
-	//node and token initialization
-	nodes := base.CreateNodes(client_ch, close_ch, num)
-	base.InitializeTokens(nodes, num)
-	numTokens := 0
-	for _, node := range nodes {
-		numTokens += len(node.GetTokens())
+	var tests = []struct {
+		numNodesAndTokens int
+	}{
+		{0},
+		{5},
+		{8},
+		{200},
+		{1000},
 	}
-	expected := 5
-	if numTokens != expected {
-		t.Errorf("Expected %d, but got %d", expected, numTokens)
+	for _, tt := range tests {
+		testname := fmt.Sprintf("%d_nodes/tokens", tt.numNodesAndTokens)
+		t.Run(testname, func(t *testing.T) {
+			close_ch := make(chan struct{})
+			client_ch := make(chan base.Message)
+			c := config.InstantiateConfig()
+			c.NUM_NODES = tt.numNodesAndTokens
+			c.NUM_TOKENS = tt.numNodesAndTokens
+
+			//node and token initialization
+			nodes := base.CreateNodes(client_ch, close_ch, &c)
+			base.InitializeTokens(nodes, &c)
+			numTokens := 0
+			for _, node := range nodes {
+				numTokens += len(node.GetTokens())
+			}
+
+			if numTokens != tt.numNodesAndTokens {
+				t.Errorf("expected: %d, got: %d", tt.numNodesAndTokens, numTokens)
+			}
+		})
 	}
 }
-
 func TestTokenRange(t *testing.T) {
 	close_ch := make(chan struct{})
-	num := 3
-	numTokens := 3
 	client_ch := make(chan base.Message)
 
+	testNumTokens := 3
+	c := config.InstantiateConfig()
+	c.NUM_NODES = 3
+	c.NUM_TOKENS = testNumTokens
+
 	//node and token initialization
-	nodes := base.CreateNodes(client_ch, close_ch, num)
+	nodes := base.CreateNodes(client_ch, close_ch, &c)
 	maxValue := new(big.Int)
 	maxValue.SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16)
 
-	tokenRangeSize := new(big.Int).Div(maxValue, big.NewInt(int64(num)))
-	base.InitializeTokens(nodes, num)
+	tokenRangeSize := new(big.Int).Div(maxValue, big.NewInt(int64(testNumTokens)))
+	base.InitializeTokens(nodes, &c)
 
 	allTokens := make([]*base.Token, 0)
 
@@ -68,7 +101,7 @@ func TestTokenRange(t *testing.T) {
 	for i, token := range allTokens {
 		startRange := new(big.Int).Mul(tokenRangeSize, big.NewInt(int64(i)))
 		endRange := new(big.Int).Mul(tokenRangeSize, big.NewInt(int64(i+1)))
-		if i != numTokens-1 {
+		if i != testNumTokens-1 {
 			endRange.Sub(endRange, big.NewInt(1))
 		}
 		if token.GetStartRange() != fmt.Sprintf("%032X", startRange) {
@@ -82,17 +115,20 @@ func TestTokenRange(t *testing.T) {
 
 func TestTokenUnevenRange(t *testing.T) {
 	close_ch := make(chan struct{})
-	num := 3
-	numTokens := 5
 	client_ch := make(chan base.Message)
 
+	testNumTokens := 5
+	c := config.InstantiateConfig()
+	c.NUM_NODES = 3
+	c.NUM_TOKENS = testNumTokens
+
 	//node and token initialization
-	nodes := base.CreateNodes(client_ch, close_ch, num)
+	nodes := base.CreateNodes(client_ch, close_ch, &c)
 	maxValue := new(big.Int)
 	maxValue.SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16)
 
-	tokenRangeSize := new(big.Int).Div(maxValue, big.NewInt(int64(numTokens)))
-	base.InitializeTokens(nodes, numTokens)
+	tokenRangeSize := new(big.Int).Div(maxValue, big.NewInt(int64(testNumTokens)))
+	base.InitializeTokens(nodes, &c)
 
 	allTokens := make([]*base.Token, 0)
 
@@ -110,7 +146,7 @@ func TestTokenUnevenRange(t *testing.T) {
 	for i, token := range allTokens {
 		startRange := new(big.Int).Mul(tokenRangeSize, big.NewInt(int64(i)))
 		endRange := new(big.Int).Mul(tokenRangeSize, big.NewInt(int64(i+1)))
-		if i != numTokens-1 {
+		if i != testNumTokens-1 {
 			endRange.Sub(endRange, big.NewInt(1))
 		}
 		if token.GetStartRange() != fmt.Sprintf("%032X", startRange) {
@@ -123,16 +159,18 @@ func TestTokenUnevenRange(t *testing.T) {
 }
 
 func TestTokenRandomDistribution(t *testing.T) { //extremely low chance numTokens will come out sorted after assignment
-	num := 5
-	numTokens := 15
 	client_ch := make(chan base.Message)
 
+	c := config.InstantiateConfig()
+	c.NUM_NODES = 5
+	c.NUM_TOKENS = 15
+
 	//node and token initialization
-	nodes := base.CreateNodes(client_ch, make(chan struct{}), num)
+	nodes := base.CreateNodes(client_ch, make(chan struct{}), &c)
 	maxValue := new(big.Int)
 	maxValue.SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16)
 
-	base.InitializeTokens(nodes, numTokens)
+	base.InitializeTokens(nodes, &c)
 
 	allTokens := make([]*base.Token, 0)
 
@@ -175,7 +213,7 @@ func TestReplicationCount(t *testing.T) {
 			c.N = tt.N
 			c.NUM_NODES = tt.numNodes
 			c.NUM_TOKENS = tt.numTokens
-			actual := base.GetReplicationCount(c)
+			actual := base.GetReplicationCount(&c)
 
 			if actual != tt.expected {
 				t.Errorf("expected: %d, got: %d", tt.expected, actual)
