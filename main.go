@@ -88,19 +88,20 @@ func SetConfigs(c *config.Config, reader *bufio.Reader) {
 	fmt.Println("Start System Configuration")
 
 	prompts := []struct {
+		config_type  string
 		message      string
 		setter       func(int)
 		defaultValue int
 	}{
-		{fmt.Sprintf("Set number of physical nodes (default: %d): ", config.NUM_NODES), func(val int) { c.NUM_NODES = val }, config.NUM_NODES},
-		{fmt.Sprintf("Set number of tokens (default: %d): ", config.NUM_TOKENS), func(val int) { c.NUM_TOKENS = val }, config.NUM_TOKENS},
-		{fmt.Sprintf("Set number of CLIENT_GET_TIMEOUT in milliseconds (default: %d): ", config.CLIENT_GET_TIMEOUT_MS), func(val int) { c.CLIENT_GET_TIMEOUT_MS = val }, config.CLIENT_GET_TIMEOUT_MS},
-		{fmt.Sprintf("Set number of CLIENT_PUT_TIMEOUT in milliseconds (default: %d): ", config.CLIENT_PUT_TIMEOUT_MS), func(val int) { c.CLIENT_PUT_TIMEOUT_MS = val }, config.CLIENT_PUT_TIMEOUT_MS},
-		{fmt.Sprintf("Set number of SET_DATA_TIMEOUT in ms (default: %d): ", config.SET_DATA_TIMEOUT_MS), func(val int) { c.SET_DATA_TIMEOUT_MS = val }, config.SET_DATA_TIMEOUT_MS},
-		{fmt.Sprintf("Set number of N (default: %d): ", config.N), func(val int) { c.N = val }, config.N},
-		{fmt.Sprintf("Set number of R (default: %d): ", config.R), func(val int) { c.R = val }, config.R},
-		{fmt.Sprintf("Set number of W (default: %d): ", config.W), func(val int) { c.W = val }, config.W},
-		{fmt.Sprintf("Set debug level (default: %d): ", config.DEBUG_LEVEL), func(val int) { c.DEBUG_LEVEL = val }, config.DEBUG_LEVEL},
+		{"NUM_NODES", fmt.Sprintf("Set number of physical nodes (default: %d): ", config.NUM_NODES), func(val int) { c.NUM_NODES = val }, config.NUM_NODES},
+		{"NUM_TOKENS", fmt.Sprintf("Set number of tokens (default: %d): ", config.NUM_TOKENS), func(val int) { c.NUM_TOKENS = val }, config.NUM_TOKENS},
+		{"GET_TIMEOUT", fmt.Sprintf("Set number of CLIENT_GET_TIMEOUT in milliseconds (default: %d): ", config.CLIENT_GET_TIMEOUT_MS), func(val int) { c.CLIENT_GET_TIMEOUT_MS = val }, config.CLIENT_GET_TIMEOUT_MS},
+		{"PUT_TIMEOUT", fmt.Sprintf("Set number of CLIENT_PUT_TIMEOUT in milliseconds (default: %d): ", config.CLIENT_PUT_TIMEOUT_MS), func(val int) { c.CLIENT_PUT_TIMEOUT_MS = val }, config.CLIENT_PUT_TIMEOUT_MS},
+		{"DATA_TIMEOUT", fmt.Sprintf("Set number of SET_DATA_TIMEOUT in ms (default: %d): ", config.SET_DATA_TIMEOUT_MS), func(val int) { c.SET_DATA_TIMEOUT_MS = val }, config.SET_DATA_TIMEOUT_MS},
+		{"N", fmt.Sprintf("Set number of N (default: %d): ", config.N), func(val int) { c.N = val }, config.N},
+		{"R", fmt.Sprintf("Set number of R (default: %d): ", config.R), func(val int) { c.R = val }, config.R},
+		{"W", fmt.Sprintf("Set number of W (default: %d): ", config.W), func(val int) { c.W = val }, config.W},
+		{"DEBUG_LEVEL", fmt.Sprintf("Set debug level (default: %d): ", config.DEBUG_LEVEL), func(val int) { c.DEBUG_LEVEL = val }, config.DEBUG_LEVEL},
 	}
 
 	for _, prompt := range prompts {
@@ -120,8 +121,12 @@ func SetConfigs(c *config.Config, reader *bufio.Reader) {
 			value, err := strconv.Atoi(input)
 
 			if err == nil && value > 0 {
+				if (prompt.config_type == "R" || prompt.config_type == "W") && value > c.N {
+					fmt.Printf("WARNING: You are trying to set a %s value of %d which is larger than N. Please enter a value where %s ≤ N.\n",
+						prompt.config_type, value, prompt.config_type)
+					continue
+				}
 				prompt.setter(value)
-				// fmt.Printf("set to %d.\n\n", value)
 				break
 			}
 
