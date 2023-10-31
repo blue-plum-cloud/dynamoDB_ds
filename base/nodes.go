@@ -231,7 +231,7 @@ func (n *Node) Put(key string, value string, c *config.Config) {
 	replicationCount := GetReplicationCount(c)
 
 	// TODO: use this when sir Ian adjust the test case for args in nValue
-	// W := getWCount(nValue)
+	W := getWCount(c)
 
 	hashKey := ComputeMD5(key)
 	n.increment_vclk()
@@ -292,7 +292,7 @@ func (n *Node) Put(key string, value string, c *config.Config) {
 			visitedNodes[curToken.phy_id] = struct{}{}
 		}
 
-		if successfulReplication == c.W {
+		if successfulReplication == W {
 			n.client_ch <- Message{Command: constants.ACK, Key: key, SrcID: n.GetID()}
 		}
 	}
