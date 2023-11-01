@@ -2,6 +2,7 @@ package tests
 
 import (
 	"base"
+	"config"
 	"fmt"
 	"testing"
 )
@@ -16,35 +17,34 @@ func TestNoUpdateGetPut(t *testing.T) {
 	var tests = []struct {
 		numNodes, numTokens, N, W int
 	}{
-		{5, 5, 0, 0},
-		{10, 10, 0, 0},
-		{40, 40, 0, 0},
-		{100, 100, 0, 0},
-		{800, 800, 0, 0},
+		{5, 5, 1, 1},
+		{10, 10, 1, 1},
+		{40, 40, 1, 1},
+		{100, 100, 1, 1},
+		{800, 800, 1, 1},
 
-		{5, 10, 0, 0},
-		{5, 12, 0, 0},
-		{15, 10, 0, 0},
-		{273, 927, 0, 0},
+		{5, 10, 1, 1},
+		{5, 12, 1, 1},
+		{15, 10, 1, 1},
+		{273, 927, 1, 1},
 	}
 	for _, tt := range tests {
 		testname := fmt.Sprintf("%d_nodes_%d_tokens", tt.numNodes, tt.numTokens)
 		t.Run(testname, func(t *testing.T) {
-			sys_config := base.Config{
-				NUM_NODES:  tt.numNodes,
-				NUM_TOKENS: tt.numTokens,
-				N:          tt.N, W: tt.W,
-				CLIENT_GET_TIMEOUT_MS: 10_000, // set long timeout as we are not interested in testing timeout here
-				CLIENT_PUT_TIMEOUT_MS: 10_000,
-				SET_DATA_TIMEOUT_MS:   10_000,
-			}
+			c := config.InstantiateConfig()
+			c.NUM_NODES = tt.numNodes
+			c.NUM_TOKENS = tt.numTokens
+			c.N = tt.N
+			c.CLIENT_GET_TIMEOUT_MS = 10_000 // set long timeout as we are not interested in testing timeout here
+			c.CLIENT_PUT_TIMEOUT_MS = 10_000
+			c.SET_DATA_TIMEOUT_MS = 10_000
 
-			phy_nodes, close_ch := setUpNodes(&sys_config)
+			phy_nodes, close_ch := setUpNodes(&c)
 
-			putKeyValuePairs(1, keyValuePairs, phy_nodes, &sys_config)
+			putKeyValuePairs(1, keyValuePairs, phy_nodes, &c)
 
 			for key, value := range keyValuePairs {
-				node := base.FindNode(key, phy_nodes)
+				node := base.FindNode(key, phy_nodes, &c)
 				actual := node.GetData(base.ComputeMD5(key)).GetData()
 
 				if actual != value {
@@ -67,40 +67,39 @@ func TestMultipleGetPut(t *testing.T) {
 	var tests = []struct {
 		numNodes, numTokens, N, W int
 	}{
-		{5, 5, 0, 0},
-		{10, 10, 0, 0},
-		{40, 40, 0, 0},
-		{100, 100, 0, 0},
-		{800, 800, 0, 0},
+		{5, 5, 1, 1},
+		{10, 10, 1, 1},
+		{40, 40, 1, 1},
+		{100, 100, 1, 1},
+		{800, 800, 1, 1},
 
-		{5, 10, 0, 0},
-		{5, 12, 0, 0},
-		{15, 10, 0, 0},
+		{5, 10, 1, 1},
+		{5, 12, 1, 1},
+		{15, 10, 1, 1},
 	}
 	for _, tt := range tests {
 		testname := fmt.Sprintf("%d_nodes_%d_tokens", tt.numNodes, tt.numTokens)
 		t.Run(testname, func(t *testing.T) {
-			sys_config := base.Config{
-				NUM_NODES:  tt.numNodes,
-				NUM_TOKENS: tt.numTokens,
-				N:          tt.N, W: tt.W,
-				CLIENT_GET_TIMEOUT_MS: 10_000, // set long timeout as we are not interested in testing timeout here
-				CLIENT_PUT_TIMEOUT_MS: 10_000,
-				SET_DATA_TIMEOUT_MS:   10_000,
-			}
+			c := config.InstantiateConfig()
+			c.NUM_NODES = tt.numNodes
+			c.NUM_TOKENS = tt.numTokens
+			c.N = tt.N
+			c.CLIENT_GET_TIMEOUT_MS = 10_000 // set long timeout as we are not interested in testing timeout here
+			c.CLIENT_PUT_TIMEOUT_MS = 10_000
+			c.SET_DATA_TIMEOUT_MS = 10_000
 
-			phy_nodes, close_ch := setUpNodes(&sys_config)
+			phy_nodes, close_ch := setUpNodes(&c)
 
-			putKeyValuePairs(1, keyValuePairs, phy_nodes, &sys_config)
+			putKeyValuePairs(1, keyValuePairs, phy_nodes, &c)
 
 			updateTimes := 5
 			for i := 0; i < updateTimes; i++ {
 				randomlyUpdateValues(keyValuePairs, 1000)
-				putKeyValuePairs(1, keyValuePairs, phy_nodes, &sys_config)
+				putKeyValuePairs(1, keyValuePairs, phy_nodes, &c)
 			}
 
 			for key, value := range keyValuePairs {
-				node := base.FindNode(key, phy_nodes)
+				node := base.FindNode(key, phy_nodes, &c)
 				actual := node.GetData(base.ComputeMD5(key)).GetData()
 
 				if actual != value {
