@@ -236,15 +236,15 @@ func (n *Node) Put(key string, value string, c *config.Config) {
 	n.increment_vclk()
 	copy_vclk := n.copy_vclk()
 
-	if c.DEBUG_LEVEL >= constants.INFO {
-		fmt.Printf("Put: Coordinator node = %d, responsible for hashkey = %032X, replicationCount %d\n", n.GetID(), hashKey, replicationCount)
-	}
-
 	// Replication process
 	curTreeNode := n.tokenStruct.Search(hashKey, c)
 	initToken := curTreeNode.Token
 	visitedNodes := make(map[int]struct{}) // To keep track of unique physical nodes. Use map as set. Use struct{} to occupy 0 space
 	handoffQueue := make([]*Token, 0)
+
+	if c.DEBUG_LEVEL >= constants.INFO {
+		fmt.Printf("Put: Coordinator node = %d, token = %d, responsible for hashkey = %032X, replicationCount %d\n", n.GetID(), curTreeNode.Token.id, hashKey, replicationCount)
+	}
 
 	// Coordinator copy
 	newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
