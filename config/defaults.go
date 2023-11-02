@@ -4,7 +4,7 @@ const (
 	//default values for config struct
 	NUM_NODES  = 10
 	NUM_TOKENS = 10
-	N          = 8 // number of put replication, MUST BE LESS THAN NUM_NODES
+	N          = 5 // number of put replication, MUST BE LESS THAN NUM_NODES (R+W>N, R,W < N)
 	R          = 3
 	W          = 3
 
