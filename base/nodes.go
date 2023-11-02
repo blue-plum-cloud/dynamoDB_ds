@@ -72,7 +72,7 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 	defer wg.Done()
 
 	//put timer
-	getTimer := time.NewTimer(time.Duration(c.CLIENT_GET_TIMEOUT_MS))
+	getTimer := time.NewTimer(time.Duration(c.CLIENT_GET_TIMEOUT_MS) * time.Millisecond)
 	getTimer.Stop()
 
 	for {
