@@ -108,10 +108,11 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 				if c.DEBUG_LEVEL >= 1 {
 					fmt.Printf("Start: %d->%d BACK_DATA, message info: key=%s, object=(%s)\n", msg.SrcID, n.GetID(), msg.Key, msg.ObjData.ToString())
 				}
-				if _, exists := n.backup[msg.SrcID]; !exists {
-					n.backup[msg.SrcID] = make(map[string]*Object)
+				backupID := msg.HandoffToken.phy_id
+				if _, exists := n.backup[backupID]; !exists {
+					n.backup[backupID] = make(map[string]*Object)
 				}
-				n.backup[msg.SrcID][msg.Key] = msg.ObjData
+				n.backup[backupID][msg.Key] = msg.ObjData
 				n.channels[msg.SrcID] <- Message{Command: constants.ACK, Key: msg.Key, SrcID: n.GetID()}
 				msg.Command = constants.SET_DATA
 				msg.SrcID = n.GetID()
@@ -268,7 +269,7 @@ func (n *Node) Put(key string, value string, c *config.Config) {
 		}
 
 		if _, visited := visitedNodes[curToken.phy_id]; !visited {
-			isHandoff := len(visitedNodes) > replicationCount // counts coordinator node
+			isHandoff := len(visitedNodes) > replicationCount - 1 // counts coordinator node
 			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
 			msg := &Message{Command: constants.SET_DATA, Key: hashKey, ObjData: &newObj, SrcID: n.GetID()}
 			if isHandoff {
