@@ -15,4 +15,5 @@ const (
 	READ_DATA_ACK = 106
 	BACK_DATA     = 107
 	REQ_REVIVE    = 108
+	REQ_PRINT     = 109
 )

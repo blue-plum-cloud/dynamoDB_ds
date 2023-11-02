@@ -16,7 +16,16 @@ import (
 
 var wg sync.WaitGroup
 
-func ParseOneArg(input string, commandName string) (string, error) {
+func ParseZeroArgs(input string, commandName string) error {
+	trimString := fmt.Sprintf("%s(", commandName)
+	args := strings.TrimSuffix(strings.TrimPrefix(input, trimString), ")")
+	if len(args) != 0 {
+		return errors.New("Invalid input for print. Expect print()")
+	}
+	return nil
+}
+
+func ParseOneArgs(input string, commandName string) (string, error) {
 	trimString := fmt.Sprintf("%s(", commandName)
 	key := strings.TrimSuffix(strings.TrimPrefix(input, trimString), ")")
 	parts := strings.SplitN(key, ",", 2)
@@ -81,6 +90,23 @@ func ListenPutReply(key string, value string, client_ch chan base.Message, c *co
 
 	case <-time.After(time.Duration(c.CLIENT_PUT_TIMEOUT_MS) * time.Millisecond): // timeout reached
 		fmt.Println("Put Timeout reached")
+	}
+}
+
+func ListenPrintReply(client_ch chan base.Message, c *config.Config) {
+	recv_cnt := 0
+	for {
+		select {
+		case printMsg := <-client_ch: // reply received in time
+			fmt.Println(printMsg.Data)
+			recv_cnt += 1
+			if recv_cnt >= c.NUM_NODES {
+				return
+			}
+
+		case <-time.After(time.Duration(c.CLIENT_PUT_TIMEOUT_MS) * time.Millisecond): // timeout reached
+			fmt.Println("Print Timeout reached")
+		}
 	}
 }
 
@@ -178,7 +204,7 @@ func main() {
 
 		//user inputs get()
 		if strings.HasPrefix(input, "get(") && strings.HasSuffix(input, ")") {
-			key, err := ParseOneArg(input, "get")
+			key, err := ParseOneArgs(input, "get")
 			if err != nil {
 				fmt.Println(err)
 				continue
@@ -216,7 +242,7 @@ func main() {
 			channel <- base.Message{Command: constants.REQ_KILL, Data: duration}
 
 		} else if strings.HasPrefix(input, "revive(") && strings.HasSuffix(input, ")") {
-			nodeIdxString, err := ParseOneArg(input, "revive")
+			nodeIdxString, err := ParseOneArgs(input, "revive")
 			if err != nil {
 				fmt.Println(err)
 				continue
@@ -226,6 +252,20 @@ func main() {
 			node := phy_nodes[nodeIdx]
 			channel := (*node).GetChannel()
 			channel <- base.Message{Command: constants.REQ_REVIVE}
+
+		} else if strings.HasPrefix(input, "print(") && strings.HasSuffix(input, ")") {
+			err := ParseZeroArgs(input, "print")
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+
+			go ListenPrintReply(client_ch, &c)
+
+			for _, node := range phy_nodes {
+				channel := (*node).GetChannel()
+				channel <- base.Message{Command: constants.REQ_PRINT}
+			}
 
 		} else if input == "exit" {
 			close(close_ch)

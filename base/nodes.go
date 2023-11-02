@@ -143,8 +143,14 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 					fmt.Printf("Start: %d->%d ACK received\n", msg.SrcID, n.GetID())
 				}
 				n.awaitAck[msg.SrcID].Store(false)
+			
+			case constants.REQ_PRINT:
+				if c.DEBUG_LEVEL >= constants.INFO {
+					fmt.Printf("Start: %d->%d REQ_PRINT received\n", msg.SrcID, n.GetID())
+				}
+				n.client_ch <- Message{Command: constants.ACK, Data: n.ToString(), SrcID: n.GetID()}
 
-			}
+			} // switch msg.Command
 
 		case <-getTimer.C:
 			if n.numReads < c.R {

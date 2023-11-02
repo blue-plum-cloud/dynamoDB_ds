@@ -4,6 +4,7 @@ import (
 	"config"
 	"constants"
 	"fmt"
+	"strings"
 	"sync/atomic"
 )
 
@@ -92,6 +93,30 @@ func (n *Node) GetID() int {
 
 func (n *Node) GetTokenStruct() BST {
 	return n.tokenStruct
+}
+
+func (n *Node) ToString() string {
+	var data strings.Builder
+	for k, v := range n.data {
+		data.WriteString(fmt.Sprintf("%s: %s\n", k, v.ToString()))
+	}
+	
+	var backup strings.Builder
+	for _, backupData := range n.backup {
+		for k, v := range backupData {
+			backup.WriteString(fmt.Sprintf("%s: %s\n", k, v.ToString()))
+		}
+	}
+
+	return fmt.Sprintf(`
+id=%d,
+v_clk=%v,
+tokens=%v,
+data:
+%s
+backup
+%v`,
+	n.id, n.v_clk, n.tokens, data.String(), backup.String())
 }
 
 type Token struct {
