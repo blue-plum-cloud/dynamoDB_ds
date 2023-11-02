@@ -121,6 +121,11 @@ func SetConfigs(c *config.Config, reader *bufio.Reader) {
 			value, err := strconv.Atoi(input)
 
 			if err == nil && value > 0 {
+				if prompt.config_type == "N" && value > c.NUM_NODES {
+					fmt.Printf("WARNING: You are trying to set a %s value of %d which is larger than NUM_NODES. Please enter a value where %s ≤ NUM_NODES.\n",
+						prompt.config_type, value, prompt.config_type)
+					continue
+				}
 				if (prompt.config_type == "R" || prompt.config_type == "W") && value > c.N {
 					fmt.Printf("WARNING: You are trying to set a %s value of %d which is larger than N. Please enter a value where %s ≤ N.\n",
 						prompt.config_type, value, prompt.config_type)
