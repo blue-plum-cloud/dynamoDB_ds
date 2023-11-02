@@ -87,6 +87,10 @@ func InitializeTokens(phy_nodes []*Node, c *config.Config) {
 			token := allTokens[tokenCounter]
 			token.phy_id = node.GetID()
 			node.tokens = append(node.tokens, token)
+			if c.DEBUG_LEVEL >= constants.INFO {
+				fmt.Printf("\nInsert token %d into node %d with start range %s and end range %s\n",
+					token.id, token.phy_id, token.range_start, token.range_end)
+			}
 			tokenCounter++
 		}
 
