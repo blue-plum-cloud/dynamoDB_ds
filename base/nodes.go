@@ -363,7 +363,7 @@ func (n *Node) Get(key string, c *config.Config) {
 
 	reqCounter := 0
 
-	for reqCounter < c.N {
+	for reqCounter < c.N-1 {
 		curTreeNode = n.tokenStruct.getNext(curTreeNode)
 		curToken := curTreeNode.Token
 
