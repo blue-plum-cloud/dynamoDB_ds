@@ -9,6 +9,7 @@ import (
 
 /* To properly define message */
 type Message struct {
+	JobId	  int
 	Command int
 	Key     string
 	Data    string // for client
@@ -20,7 +21,8 @@ type Message struct {
 }
 
 func (m *Message) ToString(targetID int) string {
-	return fmt.Sprintf("%d->%d %s \t\t Key=%s, Data=%s, ObjData=(%s)", m.SrcID, targetID, constants.GetConstantString(m.Command), m.Key, m.Data, m.ObjData.ToString())
+	return fmt.Sprintf("%d->%d %s \t\t JobId=%d, Key=%s, Data=%s, ObjData=(%s)", 
+		m.SrcID, targetID, constants.GetConstantString(m.Command), m.JobId, m.Key, m.Data, m.ObjData.ToString())
 }
 
 /* Versioning information */
