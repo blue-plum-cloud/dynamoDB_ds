@@ -1,6 +1,7 @@
 package base
 
 import (
+	"bytes"
 	"config"
 	"constants"
 	"fmt"
@@ -11,7 +12,7 @@ import (
 	"time"
 )
 
-/* hijacks Start(), message commands processed is REQ_REVIVE only */
+/* hijacks Start(), message commands processed is CLIENT_REQ_REVIVE only */
 func (n *Node) busyWait(duration int, c *config.Config) {
 	if c.DEBUG_LEVEL >= constants.INFO {
 		fmt.Printf("\nbusyWait: %d killed for %d ms...\n", n.GetID(), duration)
@@ -21,7 +22,7 @@ func (n *Node) busyWait(duration int, c *config.Config) {
 	for {
 		select {
 		case msg := <-n.rcv_ch: // consume rcv_ch and throw
-			if msg.Command == constants.REQ_REVIVE {
+			if msg.Command == constants.CLIENT_REQ_REVIVE {
 				if c.DEBUG_LEVEL >= constants.INFO {
 					fmt.Printf("\nbusyWait: %d reviving...\n", n.GetID())
 				}
@@ -82,69 +83,63 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 			return
 
 		case msg := <-n.rcv_ch:
-			switch msg.Command {
-			case constants.REQ_READ:
-				n.Get(msg.Key, c)
-				// n.client_ch <- Message{Command: constants.ACK, Key: msg.Key, Data: obj.GetData(), SrcID: n.GetID()}
+			var debugMsg bytes.Buffer // allow appending of messages
+			debugMsg.WriteString(fmt.Sprintf("Start: %s ", msg.ToString(n.GetID())))
 
-			case constants.REQ_WRITE:
+			switch msg.Command {
+			case constants.CLIENT_REQ_READ:
+				go n.Get(msg.Key, c) // nicer debug message (CLIENT_REQ_READ before subsequent handling messages)
+
+			case constants.CLIENT_REQ_WRITE:
 				go n.Put(msg.Key, msg.Data, c)
 
-			case constants.REQ_KILL:
+			case constants.CLIENT_REQ_KILL:
 				duration, err := strconv.Atoi(strings.TrimSpace(msg.Data))
 				if err != nil {
-					fmt.Printf("REQ_KILL ERROR: %d->%d invalid duration %s, expect integer value denoting milliseconds to kill for.", msg.SrcID, n.GetID(), msg.Data)
+					fmt.Printf("CLIENT_REQ_KILL ERROR: %d->%d invalid duration %s, expect integer value denoting milliseconds to kill for.", msg.SrcID, n.GetID(), msg.Data)
 				}
 				n.busyWait(duration, c) // blocking
 
 			case constants.SET_DATA:
-				if c.DEBUG_LEVEL >= constants.INFO {
-					fmt.Printf("Start: %d->%d SET_DATA, message info: key=%s, object=(%s)\n", msg.SrcID, n.GetID(), msg.Key, msg.ObjData.ToString())
-				}
 				n.data[msg.Key] = msg.ObjData
-				n.channels[msg.SrcID] <- Message{Command: constants.ACK, Key: msg.Key, SrcID: n.GetID()}
+				n.channels[msg.SrcID] <- Message{Command: constants.ACK_SET_DATA, Key: msg.Key, SrcID: n.GetID()}
 
 			case constants.BACK_DATA:
-				if c.DEBUG_LEVEL >= 1 {
-					fmt.Printf("Start: %d->%d BACK_DATA, message info: key=%s, object=(%s)\n", msg.SrcID, n.GetID(), msg.Key, msg.ObjData.ToString())
-				}
 				backupID := msg.HandoffToken.phy_id
 				if _, exists := n.backup[backupID]; !exists {
 					n.backup[backupID] = make(map[string]*Object)
 				}
 				n.backup[backupID][msg.Key] = msg.ObjData
-				n.channels[msg.SrcID] <- Message{Command: constants.ACK, Key: msg.Key, SrcID: n.GetID()}
+				n.channels[msg.SrcID] <- Message{Command: constants.ACK_BACK_DATA, Key: msg.Key, SrcID: n.GetID()}
 				msg.Command = constants.SET_DATA
 				msg.SrcID = n.GetID()
 				go n.restoreHandoff(msg.HandoffToken, msg, c)
 
 			case constants.READ_DATA: //coordinator requested to read data, so send it back
-				if c.DEBUG_LEVEL >= constants.INFO {
-					fmt.Printf("Start: %d->%d READ_DATA, message info: key=%s\n", msg.SrcID, n.GetID(), msg.Key)
-				}
 				//return data
 				obj := n.data[msg.Key]
 				n.channels[msg.SrcID] <- Message{Command: constants.READ_DATA_ACK, Key: msg.Key, SrcID: n.GetID(), ObjData: obj}
 
 			case constants.READ_DATA_ACK:
-				if c.DEBUG_LEVEL >= constants.INFO {
-					fmt.Printf("Start: %d->%d READ_DATA_ACK, message info: key=%s, object=(%s), numReads: %d\n", msg.SrcID, n.GetID(), msg.Key, msg.ObjData.ToString(), n.numReads)
-				}
+				debugMsg.WriteString(fmt.Sprintf("numReads: %d", n.numReads))
 				if n.numReads == c.R {
 					n.reconcile(n.data[msg.Key], msg.ObjData)
 					fmt.Println(msg.Key)
-					n.client_ch <- Message{Command: constants.ACK, Key: msg.Key, Data: n.data[msg.Key].data, SrcID: n.GetID()}
+					n.client_ch <- Message{Command: constants.CLIENT_ACK_READ, Key: msg.Key, Data: n.data[msg.Key].data, SrcID: n.GetID()}
 				} else {
 					n.reconcile(n.data[msg.Key], msg.ObjData)
 				}
 				n.numReads++
 
-			case constants.ACK:
-				if c.DEBUG_LEVEL >= constants.INFO {
-					fmt.Printf("Start: %d->%d ACK received\n", msg.SrcID, n.GetID())
-				}
+			case constants.ACK_SET_DATA:
 				n.awaitAck[msg.SrcID].Store(false)
 
+			case constants.ACK_BACK_DATA:
+				n.awaitAck[msg.SrcID].Store(false)
+			}
+
+			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
+				fmt.Printf("%s\n", debugMsg.String())
 			}
 
 		case <-getTimer.C:
@@ -198,13 +193,13 @@ func (n *Node) updateToken(token *Token, msg Message, c *config.Config) bool {
 
 	for {
 		if !(n.awaitAck[token.phy_id].Load()) {
-			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
+			if c.DEBUG_LEVEL >= constants.INFO {
 				fmt.Printf("updateToken: Replicated to token=%d, node=%d\n", token.GetID(), token.phy_id)
 			}
 			return true
 		}
 		if time.Since(reqTime) > time.Duration(c.SET_DATA_TIMEOUT_MS)*time.Millisecond {
-			if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
+			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
 				fmt.Printf("updateToken: %d->%d timeout reached.\n", n.GetID(), token.phy_id)
 			}
 			return false
@@ -251,9 +246,12 @@ func (n *Node) Put(key string, value string, c *config.Config) {
 	newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
 	n.data[hashKey] = &newObj // do not handle coordinator die
 	visitedNodes[initToken.phy_id] = struct{}{}
+	if c.DEBUG_LEVEL >= constants.INFO {
+		fmt.Printf("Put: Stored to (corodinator) token %d, node=%d\n", initToken.GetID(), initToken.phy_id)
+	}
 
 	if replicationCount == 0 {
-		n.client_ch <- Message{Command: constants.ACK, Key: key, SrcID: n.GetID()}
+		n.client_ch <- Message{Command: constants.CLIENT_ACK_WRITE, Key: key, SrcID: n.GetID()}
 	}
 
 	successfulReplication := 1
@@ -293,7 +291,7 @@ func (n *Node) Put(key string, value string, c *config.Config) {
 		}
 
 		if successfulReplication == W {
-			n.client_ch <- Message{Command: constants.ACK, Key: key, SrcID: n.GetID()}
+			n.client_ch <- Message{Command: constants.CLIENT_ACK_WRITE, Key: key, SrcID: n.GetID()}
 		}
 	}
 }
@@ -305,7 +303,7 @@ func (n *Node) requestTreeNodeData(curToken *Token, hashKey string, c *config.Co
 	}
 
 	n.awaitAck[curToken.phy_id].Store(true)
-	n.channels[curToken.phy_id] <- Message{Command: constants.REQ_READ, Key: hashKey, SrcID: n.GetID()}
+	n.channels[curToken.phy_id] <- Message{Command: constants.CLIENT_REQ_READ, Key: hashKey, SrcID: n.GetID()}
 	reqTime := time.Now()
 
 	for {

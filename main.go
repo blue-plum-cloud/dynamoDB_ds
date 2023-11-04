@@ -201,7 +201,7 @@ func main() {
 
 			node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
-			channel <- base.Message{Key: key, Command: constants.REQ_READ}
+			channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_READ, SrcID: -1}
 
 			ListenGetReply(key, client_ch, &c)
 
@@ -214,7 +214,7 @@ func main() {
 
 			node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
-			channel <- base.Message{Key: key, Command: constants.REQ_WRITE, Data: value}
+			channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, SrcID: -1}
 
 			ListenPutReply(key, value, client_ch, &c)
 
@@ -228,7 +228,7 @@ func main() {
 			nodeIdx, _ := strconv.Atoi(nodeIdxString)
 			node := phy_nodes[nodeIdx]
 			channel := (*node).GetChannel()
-			channel <- base.Message{Command: constants.REQ_KILL, Data: duration}
+			channel <- base.Message{Command: constants.CLIENT_REQ_KILL, Data: duration, SrcID: -1}
 
 		} else if strings.HasPrefix(input, "revive(") && strings.HasSuffix(input, ")") {
 			nodeIdxString, err := ParseOneArg(input, "revive")
@@ -240,7 +240,7 @@ func main() {
 			nodeIdx, _ := strconv.Atoi(nodeIdxString)
 			node := phy_nodes[nodeIdx]
 			channel := (*node).GetChannel()
-			channel <- base.Message{Command: constants.REQ_REVIVE}
+			channel <- base.Message{Command: constants.CLIENT_REQ_REVIVE, SrcID: -1}
 
 		} else if input == "exit" {
 			close(close_ch)
