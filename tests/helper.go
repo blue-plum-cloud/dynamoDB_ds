@@ -87,3 +87,22 @@ func randomlyUpdateValues(keyValueMap map[string]string, maxValueLength int) map
 
 	return keyValueMap
 }
+
+// calculatedExpectedReplicaitons takes in number of nodes, tokens and N value
+// to calculate the expected replications of the data
+func calculateExpectedTotalReplications(numNodes int, numTokens int, nValue int) int {
+	expectedReplications := nValue - 1
+	minPhyVirt := numNodes
+	if numTokens < numNodes {
+		minPhyVirt = numTokens
+	}
+	if nValue > minPhyVirt {
+		expectedReplications = minPhyVirt - 1
+	}
+
+	if expectedReplications < 0 {
+		return 0
+	} else {
+		return expectedReplications
+	}
+}
