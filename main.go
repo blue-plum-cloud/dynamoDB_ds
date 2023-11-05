@@ -41,7 +41,7 @@ func ParseTwoArgs(input string, commandName string) (string, string, error) {
 }
 
 // Separate routine from client CLI
-// Constantly consume client_ch even after timeout
+// Single and only source of client channel consume
 // Messages are tracked by JobId to handle multiple requests for same node / dropped requests
 func StartListening(close_ch chan struct{}, client_ch chan base.Message, awaitUids map[int](*atomic.Bool), c *config.Config) {
 	for {
@@ -52,22 +52,27 @@ func StartListening(close_ch chan struct{}, client_ch chan base.Message, awaitUi
 			var debugMsg bytes.Buffer // allow appending of messages
 			debugMsg.WriteString(fmt.Sprintf("Start: %s ", msg.ToString(-1)))
 
-			switch msg.Command {
+			if !awaitUids[msg.JobId].Load() { // timeout reached for job id
+				delete(awaitUids, msg.JobId)
 			
-			case constants.CLIENT_ACK_READ:
-				// TODO: validity check
+			} else {
 				awaitUids[msg.JobId].Store(false)
-				fmt.Printf("COMPLETED Jobid=%d Command=%s: (%s, %s)\n", 
-					msg.JobId, constants.GetConstantString(msg.Command), msg.Key, msg.Data)
 
-			case constants.CLIENT_ACK_WRITE:
-				// TODO: validity check
-				awaitUids[msg.JobId].Store(false)
-				fmt.Printf("COMPLETED Jobid=%d Command=%s: (%s, %s)\n", 
-					msg.JobId, constants.GetConstantString(msg.Command), msg.Key, msg.Data)
-
-			default:
-				panic("Unexpected ACK received in client_ch.")
+				switch msg.Command {
+			
+				case constants.CLIENT_ACK_READ:
+					// TODO: validity check
+					fmt.Printf("COMPLETED Jobid=%d Command=%s: (%s, %s)\n", 
+						msg.JobId, constants.GetConstantString(msg.Command), msg.Key, msg.Data)
+	
+				case constants.CLIENT_ACK_WRITE:
+					// TODO: validity check
+					fmt.Printf("COMPLETED Jobid=%d Command=%s: (%s, %s)\n", 
+						msg.JobId, constants.GetConstantString(msg.Command), msg.Key, msg.Data)
+	
+				default:
+					panic("Unexpected ACK received in client_ch.")
+				}
 			}
 			
 			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
@@ -78,6 +83,7 @@ func StartListening(close_ch chan struct{}, client_ch chan base.Message, awaitUi
 }
 
 // Separate routine from client CLI
+// Constantly consume client_ch even after timeout
 // !!!! Loops infinitely if server drops request and does not ACK it
 func StartTimeout(awaitUids map[int](*atomic.Bool), jobId int, command int, timeout_ms int, close_ch chan struct{}) {
 	if _, exists := awaitUids[jobId]; !exists {
@@ -85,22 +91,18 @@ func StartTimeout(awaitUids map[int](*atomic.Bool), jobId int, command int, time
 	}
 	awaitUids[jobId].Store(true)
 
-	isTimeout := false
 	reqTime := time.Now()
 	
-	for {
-		select {
-		case <- close_ch:
-			return
-		default:
-			if !(awaitUids[jobId].Load()) {
-				delete(awaitUids, jobId)
-				return
-			}
-			if !isTimeout && time.Since(reqTime) > time.Duration(timeout_ms)*time.Millisecond {
-				fmt.Printf("TIMEOUT REACHED: Jobid=%d Command=%s\n", jobId, constants.GetConstantString(command))
-				isTimeout = true
-			}
+	select {
+	case <- close_ch:
+		return
+	default:
+		if !(awaitUids[jobId].Load()) {
+			delete(awaitUids, jobId)
+		}
+		if time.Since(reqTime) > time.Duration(timeout_ms)*time.Millisecond {
+			fmt.Printf("TIMEOUT REACHED: Jobid=%d Command=%s\n", jobId, constants.GetConstantString(command))
+			awaitUids[jobId].Store(false)
 		}
 	}
 }
