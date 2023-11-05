@@ -19,6 +19,10 @@ type Message struct {
 	HandoffToken *Token // for inter-node
 }
 
+func (m *Message) ToString(targetID int) string {
+	return fmt.Sprintf("%d->%d %s \t\t Key=%s, Data=%s, ObjData=(%s)", m.SrcID, targetID, constants.GetConstantString(m.Command), m.Key, m.Data, m.ObjData.ToString())
+}
+
 /* Versioning information */
 type Context struct {
 	v_clk []int
@@ -50,6 +54,9 @@ func (o *Object) Copy() Object {
 }
 
 func (o *Object) ToString() string {
+	if o == nil {
+		return ""
+	}
 	return fmt.Sprintf("context=%v, data=%s, isReplica=%v", o.context, o.data, o.isReplica)
 }
 

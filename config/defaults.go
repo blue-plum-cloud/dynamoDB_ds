@@ -12,8 +12,6 @@ const (
 	CLIENT_PUT_TIMEOUT_MS = 2000
 	SET_DATA_TIMEOUT_MS   = 1000 // 1 second
 
-	// 1 - key info
-	// 2 - verbose, fixed random seed
-	// 3 - very verbose
-	DEBUG_LEVEL = 2
+	// see constants.go for description
+	DEBUG_LEVEL = 3
 )
