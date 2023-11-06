@@ -68,13 +68,13 @@ func generateRandomString(maxN int) string {
 // calculatedExpectedReplicaitons takes in number of nodes, tokens and N value
 // to calculate the expected replications of the data
 func calculateExpectedTotalReplications(numNodes int, numTokens int, nValue int) int {
-	expectedReplications := nValue - 1
+	expectedReplications := nValue
 	minPhyVirt := numNodes
 	if numTokens < numNodes {
 		minPhyVirt = numTokens
 	}
 	if nValue > minPhyVirt {
-		expectedReplications = minPhyVirt - 1
+		expectedReplications = minPhyVirt
 	}
 
 	if expectedReplications < 0 {
