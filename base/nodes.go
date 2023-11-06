@@ -21,9 +21,9 @@ func (n *Node) busyWait(duration int, c *config.Config) {
 
 	for {
 		select {
-		case <- n.close_ch:
+		case <-n.close_ch:
 			return
-		
+
 		case msg := <-n.rcv_ch: // consume rcv_ch and throw
 			if msg.Command == constants.CLIENT_REQ_REVIVE {
 				if c.DEBUG_LEVEL >= constants.INFO {
@@ -230,6 +230,7 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 	replicationCount := GetReplicationCount(c)
 
 	W := getWCount(c)
+	ackSent := false
 
 	hashKey := ComputeMD5(msg.Key)
 	n.increment_vclk()
@@ -253,7 +254,8 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 		fmt.Printf("Put: Stored to (corodinator) token %d, node=%d\n", initToken.GetID(), initToken.phy_id)
 	}
 
-	if replicationCount == 0 {
+	if replicationCount <= 1 {
+		ackSent = true
 		n.client_ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_WRITE, Key: msg.Key, Data: msg.Data, SrcID: n.GetID()}
 	}
 
@@ -270,7 +272,7 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 		}
 
 		if _, visited := visitedNodes[curToken.phy_id]; !visited {
-			isHandoff := len(visitedNodes) > replicationCount - 1 // counts coordinator node
+			isHandoff := len(visitedNodes) > replicationCount-1 // counts coordinator node
 			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
 			msg := &Message{JobId: msg.JobId, Command: constants.SET_DATA, Key: hashKey, ObjData: &newObj, SrcID: n.GetID()}
 			if isHandoff {
@@ -293,7 +295,8 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 			visitedNodes[curToken.phy_id] = struct{}{}
 		}
 
-		if successfulReplication == W {
+		if successfulReplication == W && !ackSent {
+			ackSent = true
 			n.client_ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_WRITE, Key: msg.Key, Data: msg.Data, SrcID: n.GetID()}
 		}
 	}
