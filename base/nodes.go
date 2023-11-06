@@ -295,6 +295,7 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 
 		if successfulReplication == W {
 			n.client_ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_WRITE, Key: msg.Key, Data: msg.Data, SrcID: n.GetID()}
+			break
 		}
 	}
 }
