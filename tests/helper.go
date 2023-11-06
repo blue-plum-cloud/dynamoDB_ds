@@ -12,7 +12,7 @@ import (
 ======= Helper functions
 */
 
-func setUpNodes(c *config.Config) ([]*base.Node, chan struct{}) {
+func setUpNodes(c *config.Config) ([]*base.Node, chan struct{}, chan base.Message) {
 
 	var wg sync.WaitGroup
 	//create close_ch for goroutines
@@ -28,7 +28,7 @@ func setUpNodes(c *config.Config) ([]*base.Node, chan struct{}) {
 		go phy_nodes[i].Start(&wg, c)
 	}
 
-	return phy_nodes, close_ch
+	return phy_nodes, close_ch, client_ch
 }
 
 // generateRandomKeyValuePairs will generate n key-value pairs
@@ -63,29 +63,6 @@ func generateRandomString(maxN int) string {
 		res[i] = letterRunes[rand.Intn(len(letterRunes))]
 	}
 	return string(res)
-}
-
-// putKeyValuePairs will go through all key-value pairs in keyValueMap,
-// find the correct node to send put request and send put command
-// to respective node
-func putKeyValuePairs(nValue int, keyValueMap map[string]string, phy_nodes []*base.Node, c *config.Config) {
-	// Put all key value pairs into system
-	for key, value := range keyValueMap {
-		node := base.FindNode(key, phy_nodes, c)
-		node.Put(base.Message{Key: key}, value, c)
-	}
-}
-
-// randomlyUpdateValues will take in a keyValueMap and randomly update
-// the values, leaving the keys unchanged. Length of newly generated values
-// range from 1 - maxValueLength
-func randomlyUpdateValues(keyValueMap map[string]string, maxValueLength int) map[string]string {
-	for key := range keyValueMap {
-		newValue := generateRandomString(maxValueLength)
-		keyValueMap[key] = newValue
-	}
-
-	return keyValueMap
 }
 
 // calculatedExpectedReplicaitons takes in number of nodes, tokens and N value

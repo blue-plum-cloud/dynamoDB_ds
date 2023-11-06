@@ -45,19 +45,7 @@ func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
 			c.W = expectedTotalReplications
 			c.CLIENT_PUT_TIMEOUT_MS = 5_000 // long timeout since we are testing replications not timeout
 
-			close_ch := make(chan struct{})
-			client_ch := make(chan base.Message)
-
-			//node and token initialization
-			phy_nodes := base.CreateNodes(client_ch, close_ch, &c)
-			base.InitializeTokens(phy_nodes, &c)
-			// defer close(close_ch)
-
-			var wg sync.WaitGroup
-			for i := range phy_nodes {
-				wg.Add(1)
-				go phy_nodes[i].Start(&wg, &c)
-			}
+			phy_nodes, close_ch, client_ch := setUpNodes(&c)
 
 			key := "Sudipta"
 			value := "Best Prof"
@@ -98,6 +86,8 @@ func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
 			if ori != 1 {
 				t.Errorf("Original data for key '%s' is missing", key)
 			}
+
+			close(close_ch)
 		})
 	}
 }
@@ -132,19 +122,7 @@ func TestSinglePutReplicationZeroNegative(t *testing.T) {
 			c.W = expectedTotalReplications
 			c.CLIENT_PUT_TIMEOUT_MS = 5_000 // long timeout since we are testing replications not timeout
 
-			close_ch := make(chan struct{})
-			client_ch := make(chan base.Message)
-
-			//node and token initialization
-			phy_nodes := base.CreateNodes(client_ch, close_ch, &c)
-			base.InitializeTokens(phy_nodes, &c)
-			// defer close(close_ch)
-
-			var wg sync.WaitGroup
-			for i := range phy_nodes {
-				wg.Add(1)
-				go phy_nodes[i].Start(&wg, &c)
-			}
+			phy_nodes, close_ch, client_ch := setUpNodes(&c)
 
 			key := "Sudipta"
 			value := "Best Prof"
@@ -185,6 +163,8 @@ func TestSinglePutReplicationZeroNegative(t *testing.T) {
 			if ori != 1 {
 				t.Errorf("Original data for key '%s' is missing", key)
 			}
+
+			close(close_ch)
 		})
 	}
 }
@@ -219,19 +199,7 @@ func TestMultipleUniquePutReplication(t *testing.T) {
 			c.W = expectedTotalReplications
 			c.CLIENT_PUT_TIMEOUT_MS = 5_000 // long timeout since we are testing replications not timeout
 
-			close_ch := make(chan struct{})
-			client_ch := make(chan base.Message)
-
-			//node and token initialization
-			phy_nodes := base.CreateNodes(client_ch, close_ch, &c)
-			base.InitializeTokens(phy_nodes, &c)
-			// defer close(close_ch)
-
-			var wg sync.WaitGroup
-			for i := range phy_nodes {
-				wg.Add(1)
-				go phy_nodes[i].Start(&wg, &c)
-			}
+			phy_nodes, close_ch, client_ch := setUpNodes(&c)
 
 			for key, value := range keyValuePairs {
 				hashedKey := base.ComputeMD5(key)
@@ -273,6 +241,8 @@ func TestMultipleUniquePutReplication(t *testing.T) {
 					t.Errorf("Original data for key '%s' is missing", key)
 				}
 			}
+
+			close(close_ch)
 		})
 	}
 }
