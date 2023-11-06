@@ -25,7 +25,7 @@ NR1. Ensure that get/put requests involving unique keys are correctly stored (no
 NR2. Ensure that get/put requests with many different updates are stored and updated correctly.
 
 ## Replication Tests
-R1. Ensure that a single put request is replicated correctly
+R1. Ensure that a single put request is replicated correctly. W == Expected replications == min(num_nodes, num_tokens, n)
 - N < Nodes, Tokens == Nodes
 - N == Nodes, Tokens == Nodes
 - N > Nodes, Tokens == Nodes
