@@ -254,7 +254,8 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 		fmt.Printf("Put: Stored to (corodinator) token %d, node=%d\n", initToken.GetID(), initToken.phy_id)
 	}
 
-	if replicationCount == 0 {
+	if replicationCount <= 1 {
+		ackSent = true
 		n.client_ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_WRITE, Key: msg.Key, Data: msg.Data, SrcID: n.GetID()}
 	}
 
