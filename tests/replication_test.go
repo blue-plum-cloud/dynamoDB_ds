@@ -64,7 +64,7 @@ func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
 
 			node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
-			channel <- base.Message{Key: key, Command: constants.REQ_WRITE, Data: value}
+			channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value}
 
 			select {
 			case ack := <-client_ch: // reply received in time
@@ -151,7 +151,7 @@ func TestSinglePutReplicationZeroNegative(t *testing.T) {
 
 			node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
-			channel <- base.Message{Key: key, Command: constants.REQ_WRITE, Data: value}
+			channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value}
 
 			select {
 			case ack := <-client_ch: // reply received in time
@@ -239,7 +239,7 @@ func TestMultipleUniquePutReplication(t *testing.T) {
 
 				node := base.FindNode(key, phy_nodes, &c)
 				channel := (*node).GetChannel()
-				channel <- base.Message{Key: key, Command: constants.REQ_WRITE, Data: value}
+				channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value}
 
 				select {
 				case ack := <-client_ch: // reply received in time
@@ -325,14 +325,15 @@ func TestMultipleOverwritePutReplication(t *testing.T) {
 				for key := range keyValuePairs {
 					value := generateRandomString(100)
 					hashedKey := base.ComputeMD5(key)
-					fmt.Printf("Key: %s ; Value: %s ; Hashed Key: %s", key, value, hashedKey)
+					fmt.Printf("Key: %s ; Value: %s ; Hashed Key: %s\n", key, value, hashedKey)
 
 					node := base.FindNode(key, phy_nodes, &c)
 					channel := (*node).GetChannel()
-					channel <- base.Message{Key: key, Command: constants.REQ_WRITE, Data: value}
+					channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value}
 
 					select {
 					case ack := <-client_ch: // reply received in time
+						fmt.Println("ack", ack)
 						if ack.Key != key {
 							panic(fmt.Sprintf("wrong key! ack.key [%s] is not key [%s].\n", ack.Key, key))
 						}

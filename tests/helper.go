@@ -72,7 +72,7 @@ func putKeyValuePairs(nValue int, keyValueMap map[string]string, phy_nodes []*ba
 	// Put all key value pairs into system
 	for key, value := range keyValueMap {
 		node := base.FindNode(key, phy_nodes, c)
-		node.Put(key, value, c)
+		node.Put(base.Message{Key: key}, value, c)
 	}
 }
 
