@@ -92,17 +92,21 @@ func StartTimeout(awaitUids map[int](*atomic.Bool), jobId int, command int, time
 	awaitUids[jobId].Store(true)
 
 	reqTime := time.Now()
-	
+
 	select {
 	case <- close_ch:
 		return
 	default:
-		if !(awaitUids[jobId].Load()) {
-			delete(awaitUids, jobId)
-		}
-		if time.Since(reqTime) > time.Duration(timeout_ms)*time.Millisecond {
-			fmt.Printf("TIMEOUT REACHED: Jobid=%d Command=%s\n", jobId, constants.GetConstantString(command))
-			awaitUids[jobId].Store(false)
+		for {
+			if !(awaitUids[jobId].Load()) {
+				delete(awaitUids, jobId)
+				return
+			}
+			if time.Since(reqTime) > time.Duration(timeout_ms)*time.Millisecond {
+				fmt.Printf("TIMEOUT REACHED: Jobid=%d Command=%s\n", jobId, constants.GetConstantString(command))
+				awaitUids[jobId].Store(false)
+				return
+			}
 		}
 	}
 }
