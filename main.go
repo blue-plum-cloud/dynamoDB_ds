@@ -3,113 +3,17 @@ package main
 import (
 	"base"
 	"bufio"
-	"bytes"
 	"config"
 	"constants"
-	"errors"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 var wg sync.WaitGroup
-
-func ParseOneArg(input string, commandName string) (string, error) {
-	trimString := fmt.Sprintf("%s(", commandName)
-	key := strings.TrimSuffix(strings.TrimPrefix(input, trimString), ")")
-	parts := strings.SplitN(key, ",", 2)
-	if len(parts) != 1 {
-		return "", errors.New("Invalid input for get. Expect get(string)")
-	}
-	return key, nil
-}
-
-func ParseTwoArgs(input string, commandName string) (string, string, error) {
-	trimString := fmt.Sprintf("%s(", commandName)
-	remainder := strings.TrimSuffix(strings.TrimPrefix(input, trimString), ")")
-	parts := strings.SplitN(remainder, ",", 2)
-	if len(parts) != 2 {
-		return "", "", errors.New("Invalid input for put. Expect put(string, string)")
-	}
-	key := strings.TrimSpace(parts[0])
-	value := strings.TrimSpace(parts[1])
-	return key, value, nil
-}
-
-// Separate routine from client CLI
-// Single and only source of client channel consume
-// Messages are tracked by JobId to handle multiple requests for same node / dropped requests
-func StartListening(close_ch chan struct{}, client_ch chan base.Message, awaitUids map[int](*atomic.Bool), c *config.Config) {
-	for {
-		select {
-		case <-close_ch:
-			return
-		case msg := <-client_ch:
-			var debugMsg bytes.Buffer // allow appending of messages
-			debugMsg.WriteString(fmt.Sprintf("Start: %s ", msg.ToString(-1)))
-
-			if !awaitUids[msg.JobId].Load() { // timeout reached for job id
-				delete(awaitUids, msg.JobId)
-
-			} else {
-				awaitUids[msg.JobId].Store(false)
-
-				switch msg.Command {
-
-				case constants.CLIENT_ACK_READ:
-					// TODO: validity check
-					fmt.Printf("COMPLETED Jobid=%d Command=%s: (%s, %s)\n",
-						msg.JobId, constants.GetConstantString(msg.Command), msg.Key, msg.Data)
-
-				case constants.CLIENT_ACK_WRITE:
-					// TODO: validity check
-					fmt.Printf("COMPLETED Jobid=%d Command=%s: (%s, %s)\n",
-						msg.JobId, constants.GetConstantString(msg.Command), msg.Key, msg.Data)
-
-				default:
-					panic("Unexpected ACK received in client_ch.")
-				}
-			}
-
-			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
-				fmt.Printf("%s\n", debugMsg.String())
-			}
-		}
-	}
-}
-
-// Separate routine from client CLI
-// Constantly consume client_ch even after timeout
-// !!!! Loops infinitely if server drops request and does not ACK it
-func StartTimeout(awaitUids map[int](*atomic.Bool), jobId int, command int, timeout_ms int, close_ch chan struct{}) {
-	if _, exists := awaitUids[jobId]; !exists {
-		awaitUids[jobId] = new(atomic.Bool)
-	}
-	awaitUids[jobId].Store(true)
-
-	reqTime := time.Now()
-
-	for {
-		select {
-		case <-close_ch:
-			return
-		default:
-			if !(awaitUids[jobId].Load()) {
-				delete(awaitUids, jobId)
-				return
-			}
-			if time.Since(reqTime) > time.Duration(timeout_ms)*time.Millisecond {
-				fmt.Printf("TIMEOUT REACHED: Jobid=%d Command=%s\n", jobId, constants.GetConstantString(command))
-				awaitUids[jobId].Store(false)
-				return
-			}
-		}
-	}
-}
 
 func SetConfigs(c *config.Config, reader *bufio.Reader) {
 	fmt.Println("Start System Configuration")
@@ -216,7 +120,9 @@ func main() {
 		wg.Add(1)
 		go phy_nodes[i].Start(&wg, &c)
 	}
-	go StartListening(close_ch, client_ch, awaitUids, &c)
+
+	//need to do this for every new client
+	go base.StartListening(close_ch, client_ch, awaitUids, &c)
 
 	for {
 		fmt.Print("\nEnter command: \n")
@@ -225,7 +131,7 @@ func main() {
 
 		//user inputs get()
 		if strings.HasPrefix(input, "get(") && strings.HasSuffix(input, ")") {
-			key, err := ParseOneArg(input, "get")
+			key, err := base.ParseOneArg(input, "get")
 			if err != nil {
 				fmt.Println(err)
 				continue
@@ -236,10 +142,10 @@ func main() {
 			channel <- base.Message{JobId: jobId, Key: key, Command: constants.CLIENT_REQ_READ, SrcID: -1, Client_Ch: client_ch}
 
 			// TODO: blocking for now, never handle concurrent get/put to same node
-			StartTimeout(awaitUids, jobId, constants.CLIENT_REQ_READ, c.CLIENT_GET_TIMEOUT_MS, close_ch)
+			base.StartTimeout(awaitUids, jobId, constants.CLIENT_REQ_READ, c.CLIENT_GET_TIMEOUT_MS, close_ch)
 
 		} else if strings.HasPrefix(input, "put(") && strings.HasSuffix(input, ")") {
-			key, value, err := ParseTwoArgs(input, "put")
+			key, value, err := base.ParseTwoArgs(input, "put")
 			if err != nil {
 				fmt.Println(err)
 				continue
@@ -250,10 +156,10 @@ func main() {
 			channel <- base.Message{JobId: jobId, Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, SrcID: -1, Client_Ch: client_ch}
 
 			// TODO: blocking for now, never handle concurrent get/put to same node
-			StartTimeout(awaitUids, jobId, constants.CLIENT_REQ_WRITE, c.CLIENT_GET_TIMEOUT_MS, close_ch)
+			base.StartTimeout(awaitUids, jobId, constants.CLIENT_REQ_WRITE, c.CLIENT_GET_TIMEOUT_MS, close_ch)
 
 		} else if strings.HasPrefix(input, "kill(") && strings.HasSuffix(input, ")") {
-			nodeIdxString, duration, err := ParseTwoArgs(input, "kill")
+			nodeIdxString, duration, err := base.ParseTwoArgs(input, "kill")
 			if err != nil {
 				fmt.Println(err)
 				continue
@@ -265,7 +171,7 @@ func main() {
 			channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_KILL, Data: duration, SrcID: -1, Client_Ch: client_ch}
 
 		} else if strings.HasPrefix(input, "revive(") && strings.HasSuffix(input, ")") {
-			nodeIdxString, err := ParseOneArg(input, "revive")
+			nodeIdxString, err := base.ParseOneArg(input, "revive")
 			if err != nil {
 				fmt.Println(err)
 				continue

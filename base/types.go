@@ -7,7 +7,11 @@ import (
 	"sync/atomic"
 )
 
-/* To properly define message */
+type Client struct {
+	Id       int
+	close_ch chan struct{}
+}
+
 type Message struct {
 	JobId   int
 	Command int
