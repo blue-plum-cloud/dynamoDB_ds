@@ -7,6 +7,7 @@ import (
 	"constants"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -105,8 +106,9 @@ func main() {
 
 	//create close_ch for goroutines
 	close_ch := make(chan struct{})
-	client_ch := make(chan base.Message)
-	awaitUids := make(map[int](*atomic.Bool))
+	// client_ch := make(chan base.Message)
+	// awaitUids := make(map[int](*atomic.Bool))
+	clients := make(map[int](*base.Client))
 
 	//node and token initialization
 	phy_nodes := base.CreateNodes(close_ch, &c)
@@ -122,94 +124,174 @@ func main() {
 	}
 
 	//need to do this for every new client
-	go base.StartListening(close_ch, client_ch, awaitUids, &c)
+	// go base.StartListening(close_ch, client_ch, awaitUids, &c)
 
 	for {
-		fmt.Print("\nEnter command: \n")
+		fmt.Print("\nEnter command: ")
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input) // Remove trailing newline
 
-		//user inputs get()
-		if strings.HasPrefix(input, "get(") && strings.HasSuffix(input, ")") {
-			key, err := base.ParseOneArg(input, "get")
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
+		// Regular expressions to match the commands
+		putRegex := `^put\(([^,]+),([^)]+)\) (\d+);$`
+		getRegex := `^get\(([^)]+)\) (\d+);$`
 
-			node := base.FindNode(key, phy_nodes, &c)
-			channel := (*node).GetChannel()
-			channel <- base.Message{JobId: jobId, Key: key, Command: constants.CLIENT_REQ_READ, SrcID: -1, Client_Ch: client_ch}
-
-			// TODO: blocking for now, never handle concurrent get/put to same node
-			base.StartTimeout(awaitUids, jobId, constants.CLIENT_REQ_READ, c.CLIENT_GET_TIMEOUT_MS, close_ch)
-
-		} else if strings.HasPrefix(input, "put(") && strings.HasSuffix(input, ")") {
-			key, value, err := base.ParseTwoArgs(input, "put")
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-
-			node := base.FindNode(key, phy_nodes, &c)
-			channel := (*node).GetChannel()
-			channel <- base.Message{JobId: jobId, Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, SrcID: -1, Client_Ch: client_ch}
-
-			// TODO: blocking for now, never handle concurrent get/put to same node
-			base.StartTimeout(awaitUids, jobId, constants.CLIENT_REQ_WRITE, c.CLIENT_GET_TIMEOUT_MS, close_ch)
-
-		} else if strings.HasPrefix(input, "kill(") && strings.HasSuffix(input, ")") {
-			nodeIdxString, duration, err := base.ParseTwoArgs(input, "kill")
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-
-			nodeIdx, _ := strconv.Atoi(nodeIdxString)
-			node := phy_nodes[nodeIdx]
-			channel := (*node).GetChannel()
-			channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_KILL, Data: duration, SrcID: -1, Client_Ch: client_ch}
-
-		} else if strings.HasPrefix(input, "revive(") && strings.HasSuffix(input, ")") {
-			nodeIdxString, err := base.ParseOneArg(input, "revive")
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-
-			nodeIdx, _ := strconv.Atoi(nodeIdxString)
-			node := phy_nodes[nodeIdx]
-			channel := (*node).GetChannel()
-			channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_REVIVE, SrcID: -1, Client_Ch: client_ch}
-
-		} else if input == "exit" {
+		if input == "exit;" {
 			close(close_ch)
 			break
-		} else if strings.HasPrefix(input, "status") {
-			fmt.Println("====== STATUS ======")
-			for _, node := range phy_nodes {
-				tokens := []int{}
-				for _, token := range node.GetTokens() {
-					tokens = append(tokens, token.GetID())
-				}
-				fmt.Printf("[Node %d] | Token(s): %v\n", node.GetID(), tokens)
-				fmt.Println("> DATA")
-				for key, value := range node.GetAllData() {
-					fmt.Printf("	[%s] %s\n", key, value.ToString())
-				}
-				fmt.Println("> BACKUPS")
-				for nodeId, value := range node.GetAllBackup() {
-					fmt.Printf("Backup for node %d", nodeId)
-					for key, valueObj := range value {
-						fmt.Printf("	[%s] %s\n", key, valueObj.ToString())
-					}
-				}
-				fmt.Println("===============")
+		}
+
+		if matched, _ := regexp.MatchString(putRegex, input); matched {
+			//put
+			key, value, client_id, err := base.ParsePutArg(putRegex, input)
+			if err != nil {
+				fmt.Println(err)
+				continue
 			}
+			client, exists := clients[client_id]
+
+			if !exists {
+				clients[client_id] = &base.Client{
+					Id:        client_id,
+					Close:     close_ch,
+					Client_ch: make(chan base.Message),
+					AwaitUids: make(map[int]*atomic.Bool)}
+				go clients[client_id].StartListening(&c)
+
+				fmt.Printf("create client %d \n", client_id)
+				// client = clients[client_id]
+			}
+
+			client = clients[client_id]
+			node := base.FindNode(key, phy_nodes, &c)
+			channel := (*node).GetChannel()
+			newJob := jobId
+
+			channel <- base.Message{
+				JobId:     newJob,
+				Key:       key,
+				Command:   constants.CLIENT_REQ_WRITE,
+				Data:      value,
+				SrcID:     client_id,
+				Client_Ch: client.Client_ch}
+			client.StartTimeout(newJob, constants.CLIENT_REQ_WRITE, c.CLIENT_GET_TIMEOUT_MS)
+		} else if matched, _ := regexp.MatchString(getRegex, input); matched {
+			//get
+			key, client_id, err := base.ParseGetArg(getRegex, input)
+			if err == nil {
+				fmt.Println(err)
+				continue
+			}
+			client, exists := clients[client_id]
+
+			if !exists {
+				clients[client_id] = &base.Client{
+					Id:        client_id,
+					Close:     close_ch,
+					Client_ch: make(chan base.Message),
+					AwaitUids: make(map[int]*atomic.Bool)}
+				go clients[client_id].StartListening(&c)
+
+				fmt.Printf("create client %d \n", client_id)
+			}
+
+			client = clients[client_id]
+
+			node := base.FindNode(key, phy_nodes, &c)
+			channel := (*node).GetChannel()
+			channel <- base.Message{
+				JobId:     jobId,
+				Key:       key,
+				Command:   constants.CLIENT_REQ_READ,
+				SrcID:     client_id,
+				Client_Ch: client.Client_ch}
+
+			client.StartTimeout(jobId, constants.CLIENT_REQ_READ, c.CLIENT_GET_TIMEOUT_MS)
+
 		} else {
-			fmt.Println("Invalid input. Expected get(string), put(string, string) or exit")
+			fmt.Println("Invalid input. Expected get(string) int;, put(string, string) int; or exit;")
 		}
 		jobId++
+		// //user inputs get()
+		// if strings.HasPrefix(input, "get(") && strings.HasSuffix(input, ")") {
+		// 	key, err := base.ParseOneArg(input, "get")
+		// 	if err != nil {
+		// 		fmt.Println(err)
+		// 		continue
+		// 	}
+
+		// 	node := base.FindNode(key, phy_nodes, &c)
+		// 	channel := (*node).GetChannel()
+		// 	channel <- base.Message{JobId: jobId, Key: key, Command: constants.CLIENT_REQ_READ, SrcID: -1, Client_Ch: client_ch}
+
+		// 	// TODO: blocking for now, never handleq concurrent get/put to same node
+		// 	base.StartTimeout(awaitUids, jobId, constants.CLIENT_REQ_READ, c.CLIENT_GET_TIMEOUT_MS, close_ch)
+
+		// } else if strings.HasPrefix(input, "put(") && strings.HasSuffix(input, ")") {
+		// 	key, value, err := base.ParseTwoArgs(input, "put")
+		// 	if err != nil {
+		// 		fmt.Println(err)
+		// 		continue
+		// 	}
+
+		// 	node := base.FindNode(key, phy_nodes, &c)
+		// 	channel := (*node).GetChannel()
+		// 	channel <- base.Message{JobId: jobId, Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, SrcID: -1, Client_Ch: client_ch}
+
+		// 	// TODO: blocking for now, never handle concurrent get/put to same node
+		// 	base.StartTimeout(awaitUids, jobId, constants.CLIENT_REQ_WRITE, c.CLIENT_GET_TIMEOUT_MS, close_ch)
+
+		// } else if strings.HasPrefix(input, "kill(") && strings.HasSuffix(input, ")") {
+		// 	nodeIdxString, duration, err := base.ParseTwoArgs(input, "kill")
+		// 	if err != nil {
+		// 		fmt.Println(err)
+		// 		continue
+		// 	}
+
+		// 	nodeIdx, _ := strconv.Atoi(nodeIdxString)
+		// 	node := phy_nodes[nodeIdx]
+		// 	channel := (*node).GetChannel()
+		// 	channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_KILL, Data: duration, SrcID: -1, Client_Ch: client_ch}
+
+		// } else if strings.HasPrefix(input, "revive(") && strings.HasSuffix(input, ")") {
+		// 	nodeIdxString, err := base.ParseOneArg(input, "revive")
+		// 	if err != nil {
+		// 		fmt.Println(err)
+		// 		continue
+		// 	}
+
+		// 	nodeIdx, _ := strconv.Atoi(nodeIdxString)
+		// 	node := phy_nodes[nodeIdx]
+		// 	channel := (*node).GetChannel()
+		// 	channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_REVIVE, SrcID: -1, Client_Ch: client_ch}
+
+		// } else if input == "exit" {
+		// 	close(close_ch)
+		// 	break
+		// } else if strings.HasPrefix(input, "status") {
+		// 	fmt.Println("====== STATUS ======")
+		// 	for _, node := range phy_nodes {
+		// 		tokens := []int{}
+		// 		for _, token := range node.GetTokens() {
+		// 			tokens = append(tokens, token.GetID())
+		// 		}
+		// 		fmt.Printf("[Node %d] | Token(s): %v\n", node.GetID(), tokens)
+		// 		fmt.Println("> DATA")
+		// 		for key, value := range node.GetAllData() {
+		// 			fmt.Printf("	[%s] %s\n", key, value.ToString())
+		// 		}
+		// 		fmt.Println("> BACKUPS")
+		// 		for nodeId, value := range node.GetAllBackup() {
+		// 			fmt.Printf("Backup for node %d", nodeId)
+		// 			for key, valueObj := range value {
+		// 				fmt.Printf("	[%s] %s\n", key, valueObj.ToString())
+		// 			}
+		// 		}
+		// 		fmt.Println("===============")
+		// 	}
+		// } else {
+		// 	fmt.Println("Invalid input. Expected get(string), put(string, string) or exit")
+		// }
+		// jobId++
 	}
 	wg.Wait()
 	fmt.Println("exiting program...")

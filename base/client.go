@@ -6,10 +6,41 @@ import (
 	"constants"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 )
+
+func ParsePutArg(putRegex string, input string) (string, string, int, error) {
+	re := regexp.MustCompile(putRegex)
+	matches := re.FindStringSubmatch(input)
+
+	if len(matches) != 4 {
+		return "", "", 0, errors.New("invalid put command format, must be put(string,string) int;")
+	}
+
+	client, err := strconv.Atoi(matches[3])
+	if err != nil {
+		return "", "", 0, errors.New("invalid put command format, must be put(string,string) int;")
+	}
+	return matches[1], matches[2], client, nil
+}
+func ParseGetArg(getRegex string, input string) (string, int, error) {
+	re := regexp.MustCompile(getRegex)
+	matches := re.FindStringSubmatch(input)
+
+	if len(matches) != 3 {
+		return "", 0, errors.New("invalid get command format, must be get(string) int;")
+	}
+
+	client, err := strconv.Atoi(matches[2])
+	if err != nil {
+		return "", 0, errors.New("invalid put command format, must be put(string,string) int;")
+	}
+	return matches[1], client, nil
+}
 
 func ParseOneArg(input string, commandName string) (string, error) {
 	trimString := fmt.Sprintf("%s(", commandName)
@@ -36,20 +67,20 @@ func ParseTwoArgs(input string, commandName string) (string, string, error) {
 // Separate routine from client CLI
 // Single and only source of client channel consume
 // Messages are tracked by JobId to handle multiple requests for same node / dropped requests
-func StartListening(close_ch chan struct{}, client_ch chan Message, awaitUids map[int](*atomic.Bool), c *config.Config) {
+func (client *Client) StartListening(c *config.Config) {
 	for {
 		select {
-		case <-close_ch:
+		case <-client.Close:
 			return
-		case msg := <-client_ch:
+		case msg := <-client.Client_ch:
 			var debugMsg bytes.Buffer // allow appending of messages
 			debugMsg.WriteString(fmt.Sprintf("Start: %s ", msg.ToString(-1)))
 
-			if !awaitUids[msg.JobId].Load() { // timeout reached for job id
-				delete(awaitUids, msg.JobId)
+			if client.AwaitUids[msg.JobId].Load() { // timeout reached for job id
+				delete(client.AwaitUids, msg.JobId)
 
 			} else {
-				awaitUids[msg.JobId].Store(false)
+				client.AwaitUids[msg.JobId].Store(false)
 
 				switch msg.Command {
 
@@ -78,28 +109,31 @@ func StartListening(close_ch chan struct{}, client_ch chan Message, awaitUids ma
 // Separate routine from client CLI
 // Constantly consume client_ch even after timeout
 // !!!! Loops infinitely if server drops request and does not ACK it
-func StartTimeout(awaitUids map[int](*atomic.Bool), jobId int, command int, timeout_ms int, close_ch chan struct{}) {
-	if _, exists := awaitUids[jobId]; !exists {
-		awaitUids[jobId] = new(atomic.Bool)
+func (client *Client) StartTimeout(jobId int, command int, timeout_ms int) {
+	if _, exists := client.AwaitUids[jobId]; !exists {
+		client.AwaitUids[jobId] = new(atomic.Bool)
 	}
-	awaitUids[jobId].Store(true)
-
+	client.AwaitUids[jobId].Store(true)
+	fmt.Println("stored jobId ", jobId)
 	reqTime := time.Now()
 
 	for {
 		select {
-		case <-close_ch:
+		case <-client.Close:
 			return
 		default:
-			if !(awaitUids[jobId].Load()) {
-				delete(awaitUids, jobId)
+			if !(client.AwaitUids[jobId].Load()) {
+				fmt.Println("here")
+				delete(client.AwaitUids, jobId)
 				return
 			}
 			if time.Since(reqTime) > time.Duration(timeout_ms)*time.Millisecond {
 				fmt.Printf("TIMEOUT REACHED: Jobid=%d Command=%s\n", jobId, constants.GetConstantString(command))
-				awaitUids[jobId].Store(false)
+				client.AwaitUids[jobId].Store(false)
 				return
 			}
 		}
 	}
 }
+
+// func (client *Client)

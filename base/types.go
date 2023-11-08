@@ -8,8 +8,10 @@ import (
 )
 
 type Client struct {
-	Id       int
-	close_ch chan struct{}
+	Id        int
+	Close     chan struct{}
+	Client_ch chan Message
+	AwaitUids map[int](*atomic.Bool)
 }
 
 type Message struct {
