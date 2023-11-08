@@ -121,13 +121,13 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 			case constants.READ_DATA: //coordinator requested to read data, so send it back
 				//return data
 				obj := n.data[msg.Key]
-				n.channels[msg.SrcID] <- Message{JobId: msg.JobId, Command: constants.READ_DATA_ACK, Key: msg.Key, SrcID: n.GetID(), ObjData: obj}
+				fmt.Printf("[%d] send acknowledgement\n", n.id)
+				n.channels[msg.SrcID] <- Message{JobId: msg.JobId, Command: constants.READ_DATA_ACK, Key: msg.Key, SrcID: n.GetID(), ObjData: obj, Client_Ch: msg.Client_Ch}
 
 			case constants.READ_DATA_ACK:
 				debugMsg.WriteString(fmt.Sprintf("numReads: %d", n.numReads))
 				if n.numReads == c.R {
 					n.reconcile(n.data[msg.Key], msg.ObjData)
-					fmt.Println(msg.Key)
 					msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_READ, Key: msg.Key, Data: n.data[msg.Key].data, SrcID: n.GetID()}
 				} else {
 					n.reconcile(n.data[msg.Key], msg.ObjData)
@@ -377,7 +377,7 @@ func (n *Node) Get(msg Message, c *config.Config) {
 		}
 
 		if _, visited := visitedNodes[curToken.phy_id]; !visited {
-			n.channels[curToken.phy_id] <- Message{JobId: msg.JobId, Command: constants.READ_DATA, Key: hashKey, SrcID: n.GetID()}
+			n.channels[curToken.phy_id] <- Message{JobId: msg.JobId, Command: constants.READ_DATA, Key: hashKey, SrcID: n.GetID(), Client_Ch: msg.Client_Ch}
 			visitedNodes[curToken.phy_id] = struct{}{}
 			reqCounter++
 		}
