@@ -20,7 +20,7 @@ func setUpNodes(c *config.Config) ([]*base.Node, chan struct{}, chan base.Messag
 	client_ch := make(chan base.Message)
 
 	//node and token initialization
-	phy_nodes := base.CreateNodes(client_ch, close_ch, c)
+	phy_nodes := base.CreateNodes(close_ch, c)
 	base.InitializeTokens(phy_nodes, c)
 	fmt.Println("Setup nodes completed..")
 	for i := range phy_nodes {

@@ -23,12 +23,12 @@ func TestNodeCreation(t *testing.T) {
 		testname := fmt.Sprintf("%d_nodes", tt.numNodes)
 		t.Run(testname, func(t *testing.T) {
 			close_ch := make(chan struct{})
-			client_ch := make(chan base.Message)
+			// client_ch := make(chan base.Message)
 			c := config.InstantiateConfig()
 			c.NUM_NODES = tt.numNodes
 
 			//node and token initialization
-			nodes := base.CreateNodes(client_ch, close_ch, &c)
+			nodes := base.CreateNodes(close_ch, &c)
 			numNodes := len(nodes)
 
 			if numNodes != tt.numNodes {
@@ -52,13 +52,13 @@ func TestTokenCreation(t *testing.T) {
 		testname := fmt.Sprintf("%d_nodes/tokens", tt.numNodesAndTokens)
 		t.Run(testname, func(t *testing.T) {
 			close_ch := make(chan struct{})
-			client_ch := make(chan base.Message)
+			// client_ch := make(chan base.Message)
 			c := config.InstantiateConfig()
 			c.NUM_NODES = tt.numNodesAndTokens
 			c.NUM_TOKENS = tt.numNodesAndTokens
 
 			//node and token initialization
-			nodes := base.CreateNodes(client_ch, close_ch, &c)
+			nodes := base.CreateNodes(close_ch, &c)
 			base.InitializeTokens(nodes, &c)
 			numTokens := 0
 			for _, node := range nodes {
@@ -73,7 +73,6 @@ func TestTokenCreation(t *testing.T) {
 }
 func TestTokenRange(t *testing.T) {
 	close_ch := make(chan struct{})
-	client_ch := make(chan base.Message)
 
 	testNumTokens := 3
 	c := config.InstantiateConfig()
@@ -81,7 +80,7 @@ func TestTokenRange(t *testing.T) {
 	c.NUM_TOKENS = testNumTokens
 
 	//node and token initialization
-	nodes := base.CreateNodes(client_ch, close_ch, &c)
+	nodes := base.CreateNodes(close_ch, &c)
 	maxValue := new(big.Int)
 	maxValue.SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16)
 
@@ -115,7 +114,7 @@ func TestTokenRange(t *testing.T) {
 
 func TestTokenUnevenRange(t *testing.T) {
 	close_ch := make(chan struct{})
-	client_ch := make(chan base.Message)
+	// client_ch := make(chan base.Message)
 
 	testNumTokens := 5
 	c := config.InstantiateConfig()
@@ -123,7 +122,7 @@ func TestTokenUnevenRange(t *testing.T) {
 	c.NUM_TOKENS = testNumTokens
 
 	//node and token initialization
-	nodes := base.CreateNodes(client_ch, close_ch, &c)
+	nodes := base.CreateNodes(close_ch, &c)
 	maxValue := new(big.Int)
 	maxValue.SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16)
 
@@ -159,14 +158,14 @@ func TestTokenUnevenRange(t *testing.T) {
 }
 
 func TestTokenRandomDistribution(t *testing.T) { //extremely low chance numTokens will come out sorted after assignment
-	client_ch := make(chan base.Message)
+	// client_ch := make(chan base.Message)
 
 	c := config.InstantiateConfig()
 	c.NUM_NODES = 5
 	c.NUM_TOKENS = 15
 
 	//node and token initialization
-	nodes := base.CreateNodes(client_ch, make(chan struct{}), &c)
+	nodes := base.CreateNodes(make(chan struct{}), &c)
 	maxValue := new(big.Int)
 	maxValue.SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16)
 

@@ -49,7 +49,7 @@ func TestNoUpdateGetPut(t *testing.T) {
 
 				node := base.FindNode(key, phy_nodes, &c)
 				channel := (*node).GetChannel()
-				channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value}
+				channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, Client_Ch: client_ch}
 
 				select {
 				case ack := <-client_ch:
@@ -118,7 +118,7 @@ func TestMultipleGetPut(t *testing.T) {
 
 					node := base.FindNode(key, phy_nodes, &c)
 					channel := (*node).GetChannel()
-					channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value}
+					channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, Client_Ch: client_ch}
 
 					select {
 					case ack := <-client_ch:

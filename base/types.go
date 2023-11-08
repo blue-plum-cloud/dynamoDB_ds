@@ -9,19 +9,21 @@ import (
 
 /* To properly define message */
 type Message struct {
-	JobId	  int
+	JobId   int
 	Command int
 	Key     string
 	Data    string // for client
 
 	SrcID   int     // for inter-node
 	ObjData *Object // for inter-node
-	
+
 	HandoffToken *Token // for inter-node
+
+	Client_Ch chan Message
 }
 
 func (m *Message) ToString(targetID int) string {
-	return fmt.Sprintf("%d->%d %s \t\t JobId=%d, Key=%s, Data=%s, ObjData=(%s)", 
+	return fmt.Sprintf("%d->%d %s \t\t JobId=%d, Key=%s, Data=%s, ObjData=(%s)",
 		m.SrcID, targetID, constants.GetConstantString(m.Command), m.JobId, m.Key, m.Data, m.ObjData.ToString())
 }
 
@@ -63,19 +65,18 @@ func (o *Object) ToString() string {
 }
 
 type Node struct {
-	id        int
-	v_clk     []int
-	channels  map[int](chan Message)
-	rcv_ch    chan Message
-	client_ch chan Message //communicates with "frontend" client
-	tokens    []*Token
-	data      map[string]*Object           // key-value data store
-	backup    map[int](map[string]*Object) // backup of key-value data stores
-	close_ch  chan struct{}                //to close go channels properly
+	id       int
+	v_clk    []int
+	channels map[int](chan Message)
+	rcv_ch   chan Message
+	tokens   []*Token
+	data     map[string]*Object           // key-value data store
+	backup   map[int](map[string]*Object) // backup of key-value data stores
+	close_ch chan struct{}                //to close go channels properly
 
 	awaitAck    map[int](*atomic.Bool) // flags to check on timeout routines
 	tokenStruct BST
-	
+
 	//state machine for Get()
 	numReads int
 }

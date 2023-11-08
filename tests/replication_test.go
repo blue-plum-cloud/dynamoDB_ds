@@ -52,7 +52,7 @@ func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
 
 			node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
-			channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value}
+			channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, Client_Ch: client_ch}
 
 			select {
 			case ack := <-client_ch: // reply received in time
@@ -129,7 +129,7 @@ func TestSinglePutReplicationZeroNegative(t *testing.T) {
 
 			node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
-			channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value}
+			channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, Client_Ch: client_ch}
 
 			select {
 			case ack := <-client_ch: // reply received in time
@@ -207,7 +207,7 @@ func TestMultipleUniquePutReplication(t *testing.T) {
 
 				node := base.FindNode(key, phy_nodes, &c)
 				channel := (*node).GetChannel()
-				channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value}
+				channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, Client_Ch: client_ch}
 
 				select {
 				case ack := <-client_ch: // reply received in time
@@ -280,7 +280,7 @@ func TestMultipleOverwritePutReplication(t *testing.T) {
 			client_ch := make(chan base.Message)
 
 			//node and token initialization
-			phy_nodes := base.CreateNodes(client_ch, close_ch, &c)
+			phy_nodes := base.CreateNodes(close_ch, &c)
 			base.InitializeTokens(phy_nodes, &c)
 			// defer close(close_ch)
 
@@ -299,7 +299,7 @@ func TestMultipleOverwritePutReplication(t *testing.T) {
 
 					node := base.FindNode(key, phy_nodes, &c)
 					channel := (*node).GetChannel()
-					channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value}
+					channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, Client_Ch: client_ch}
 
 					select {
 					case ack := <-client_ch: // reply received in time
