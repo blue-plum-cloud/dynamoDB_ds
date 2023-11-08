@@ -46,7 +46,7 @@ func ParseTwoArgs(input string, commandName string) (string, string, error) {
 func StartListening(close_ch chan struct{}, client_ch chan base.Message, awaitUids map[int](*atomic.Bool), c *config.Config) {
 	for {
 		select {
-		case <- close_ch:
+		case <-close_ch:
 			return
 		case msg := <-client_ch:
 			var debugMsg bytes.Buffer // allow appending of messages
@@ -54,27 +54,27 @@ func StartListening(close_ch chan struct{}, client_ch chan base.Message, awaitUi
 
 			if !awaitUids[msg.JobId].Load() { // timeout reached for job id
 				delete(awaitUids, msg.JobId)
-			
+
 			} else {
 				awaitUids[msg.JobId].Store(false)
 
 				switch msg.Command {
-			
+
 				case constants.CLIENT_ACK_READ:
 					// TODO: validity check
-					fmt.Printf("COMPLETED Jobid=%d Command=%s: (%s, %s)\n", 
+					fmt.Printf("COMPLETED Jobid=%d Command=%s: (%s, %s)\n",
 						msg.JobId, constants.GetConstantString(msg.Command), msg.Key, msg.Data)
-	
+
 				case constants.CLIENT_ACK_WRITE:
 					// TODO: validity check
-					fmt.Printf("COMPLETED Jobid=%d Command=%s: (%s, %s)\n", 
+					fmt.Printf("COMPLETED Jobid=%d Command=%s: (%s, %s)\n",
 						msg.JobId, constants.GetConstantString(msg.Command), msg.Key, msg.Data)
-	
+
 				default:
 					panic("Unexpected ACK received in client_ch.")
 				}
 			}
-			
+
 			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
 				fmt.Printf("%s\n", debugMsg.String())
 			}
@@ -95,18 +95,18 @@ func StartTimeout(awaitUids map[int](*atomic.Bool), jobId int, command int, time
 
 	for {
 		select {
-			case <- close_ch:
+		case <-close_ch:
+			return
+		default:
+			if !(awaitUids[jobId].Load()) {
+				delete(awaitUids, jobId)
 				return
-			default:
-				if !(awaitUids[jobId].Load()) {
-					delete(awaitUids, jobId)
-					return
-				}
-				if time.Since(reqTime) > time.Duration(timeout_ms)*time.Millisecond {
-					fmt.Printf("TIMEOUT REACHED: Jobid=%d Command=%s\n", jobId, constants.GetConstantString(command))
-					awaitUids[jobId].Store(false)
-					return
-				}
+			}
+			if time.Since(reqTime) > time.Duration(timeout_ms)*time.Millisecond {
+				fmt.Printf("TIMEOUT REACHED: Jobid=%d Command=%s\n", jobId, constants.GetConstantString(command))
+				awaitUids[jobId].Store(false)
+				return
+			}
 		}
 	}
 }
@@ -205,7 +205,7 @@ func main() {
 	awaitUids := make(map[int](*atomic.Bool))
 
 	//node and token initialization
-	phy_nodes := base.CreateNodes(client_ch, close_ch, &c)
+	phy_nodes := base.CreateNodes(close_ch, &c)
 	base.InitializeTokens(phy_nodes, &c)
 
 	// running jobId
@@ -233,7 +233,7 @@ func main() {
 
 			node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
-			channel <- base.Message{JobId: jobId, Key: key, Command: constants.CLIENT_REQ_READ, SrcID: -1}
+			channel <- base.Message{JobId: jobId, Key: key, Command: constants.CLIENT_REQ_READ, SrcID: -1, Client_Ch: client_ch}
 
 			// TODO: blocking for now, never handle concurrent get/put to same node
 			StartTimeout(awaitUids, jobId, constants.CLIENT_REQ_READ, c.CLIENT_GET_TIMEOUT_MS, close_ch)
@@ -247,7 +247,7 @@ func main() {
 
 			node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
-			channel <- base.Message{JobId: jobId, Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, SrcID: -1}
+			channel <- base.Message{JobId: jobId, Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, SrcID: -1, Client_Ch: client_ch}
 
 			// TODO: blocking for now, never handle concurrent get/put to same node
 			StartTimeout(awaitUids, jobId, constants.CLIENT_REQ_WRITE, c.CLIENT_GET_TIMEOUT_MS, close_ch)
@@ -262,7 +262,7 @@ func main() {
 			nodeIdx, _ := strconv.Atoi(nodeIdxString)
 			node := phy_nodes[nodeIdx]
 			channel := (*node).GetChannel()
-			channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_KILL, Data: duration, SrcID: -1}
+			channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_KILL, Data: duration, SrcID: -1, Client_Ch: client_ch}
 
 		} else if strings.HasPrefix(input, "revive(") && strings.HasSuffix(input, ")") {
 			nodeIdxString, err := ParseOneArg(input, "revive")
@@ -274,7 +274,7 @@ func main() {
 			nodeIdx, _ := strconv.Atoi(nodeIdxString)
 			node := phy_nodes[nodeIdx]
 			channel := (*node).GetChannel()
-			channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_REVIVE, SrcID: -1}
+			channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_REVIVE, SrcID: -1, Client_Ch: client_ch}
 
 		} else if input == "exit" {
 			close(close_ch)
