@@ -134,6 +134,8 @@ func main() {
 		// Regular expressions to match the commands
 		putRegex := `^put\(([^,]+),([^)]+)\) (\d+);$`
 		getRegex := `^get\(([^)]+)\) (\d+);$`
+		killRegex := `kill\((\d+),\s?(\d+)\);`
+		revRegex := `revive\((\d+)\);`
 
 		if input == "exit;" {
 			close(close_ch)
@@ -177,7 +179,7 @@ func main() {
 		} else if matched, _ := regexp.MatchString(getRegex, input); matched {
 			//get
 			key, client_id, err := base.ParseGetArg(getRegex, input)
-			if err == nil {
+			if err != nil {
 				fmt.Println(err)
 				continue
 			}
@@ -204,94 +206,54 @@ func main() {
 				Command:   constants.CLIENT_REQ_READ,
 				SrcID:     client_id,
 				Client_Ch: client.Client_ch}
-
+			fmt.Println("sending get to node ", node.GetID())
 			client.StartTimeout(jobId, constants.CLIENT_REQ_READ, c.CLIENT_GET_TIMEOUT_MS)
 
+		} else if input == "status;" {
+			fmt.Println("====== STATUS ======")
+			for _, node := range phy_nodes {
+				tokens := []int{}
+				for _, token := range node.GetTokens() {
+					tokens = append(tokens, token.GetID())
+				}
+				fmt.Printf("[Node %d] | Token(s): %v\n", node.GetID(), tokens)
+				fmt.Println("> DATA")
+				for key, value := range node.GetAllData() {
+					fmt.Printf("	[%s] %s\n", key, value.ToString())
+				}
+				fmt.Println("> BACKUPS")
+				for nodeId, value := range node.GetAllBackup() {
+					fmt.Printf("Backup for node %d", nodeId)
+					for key, valueObj := range value {
+						fmt.Printf("	[%s] %s\n", key, valueObj.ToString())
+					}
+				}
+				fmt.Println("===============")
+			}
+		} else if matched, _ := regexp.MatchString(killRegex, input); matched {
+			nodeIdx, duration, err := base.ParseKillArg(killRegex, input)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+
+			node := phy_nodes[nodeIdx]
+			channel := (*node).GetChannel()
+			channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_KILL, Data: duration, SrcID: -1}
+		} else if matched, _ := regexp.MatchString(revRegex, input); matched {
+			nodeIdx, err := base.ParseRevArg(revRegex, input)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+
+			node := phy_nodes[nodeIdx]
+			channel := (*node).GetChannel()
+			channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_REVIVE, SrcID: -1}
 		} else {
-			fmt.Println("Invalid input. Expected get(string) int;, put(string, string) int; or exit;")
+			fmt.Println("Invalid input. Expected get(string) int;, put(string, string) int;, kill(int,int);, revive(int);, or exit;")
 		}
 		jobId++
-		// //user inputs get()
-		// if strings.HasPrefix(input, "get(") && strings.HasSuffix(input, ")") {
-		// 	key, err := base.ParseOneArg(input, "get")
-		// 	if err != nil {
-		// 		fmt.Println(err)
-		// 		continue
-		// 	}
-
-		// 	node := base.FindNode(key, phy_nodes, &c)
-		// 	channel := (*node).GetChannel()
-		// 	channel <- base.Message{JobId: jobId, Key: key, Command: constants.CLIENT_REQ_READ, SrcID: -1, Client_Ch: client_ch}
-
-		// 	// TODO: blocking for now, never handleq concurrent get/put to same node
-		// 	base.StartTimeout(awaitUids, jobId, constants.CLIENT_REQ_READ, c.CLIENT_GET_TIMEOUT_MS, close_ch)
-
-		// } else if strings.HasPrefix(input, "put(") && strings.HasSuffix(input, ")") {
-		// 	key, value, err := base.ParseTwoArgs(input, "put")
-		// 	if err != nil {
-		// 		fmt.Println(err)
-		// 		continue
-		// 	}
-
-		// 	node := base.FindNode(key, phy_nodes, &c)
-		// 	channel := (*node).GetChannel()
-		// 	channel <- base.Message{JobId: jobId, Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, SrcID: -1, Client_Ch: client_ch}
-
-		// 	// TODO: blocking for now, never handle concurrent get/put to same node
-		// 	base.StartTimeout(awaitUids, jobId, constants.CLIENT_REQ_WRITE, c.CLIENT_GET_TIMEOUT_MS, close_ch)
-
-		// } else if strings.HasPrefix(input, "kill(") && strings.HasSuffix(input, ")") {
-		// 	nodeIdxString, duration, err := base.ParseTwoArgs(input, "kill")
-		// 	if err != nil {
-		// 		fmt.Println(err)
-		// 		continue
-		// 	}
-
-		// 	nodeIdx, _ := strconv.Atoi(nodeIdxString)
-		// 	node := phy_nodes[nodeIdx]
-		// 	channel := (*node).GetChannel()
-		// 	channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_KILL, Data: duration, SrcID: -1, Client_Ch: client_ch}
-
-		// } else if strings.HasPrefix(input, "revive(") && strings.HasSuffix(input, ")") {
-		// 	nodeIdxString, err := base.ParseOneArg(input, "revive")
-		// 	if err != nil {
-		// 		fmt.Println(err)
-		// 		continue
-		// 	}
-
-		// 	nodeIdx, _ := strconv.Atoi(nodeIdxString)
-		// 	node := phy_nodes[nodeIdx]
-		// 	channel := (*node).GetChannel()
-		// 	channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_REVIVE, SrcID: -1, Client_Ch: client_ch}
-
-		// } else if input == "exit" {
-		// 	close(close_ch)
-		// 	break
-		// } else if strings.HasPrefix(input, "status") {
-		// 	fmt.Println("====== STATUS ======")
-		// 	for _, node := range phy_nodes {
-		// 		tokens := []int{}
-		// 		for _, token := range node.GetTokens() {
-		// 			tokens = append(tokens, token.GetID())
-		// 		}
-		// 		fmt.Printf("[Node %d] | Token(s): %v\n", node.GetID(), tokens)
-		// 		fmt.Println("> DATA")
-		// 		for key, value := range node.GetAllData() {
-		// 			fmt.Printf("	[%s] %s\n", key, value.ToString())
-		// 		}
-		// 		fmt.Println("> BACKUPS")
-		// 		for nodeId, value := range node.GetAllBackup() {
-		// 			fmt.Printf("Backup for node %d", nodeId)
-		// 			for key, valueObj := range value {
-		// 				fmt.Printf("	[%s] %s\n", key, valueObj.ToString())
-		// 			}
-		// 		}
-		// 		fmt.Println("===============")
-		// 	}
-		// } else {
-		// 	fmt.Println("Invalid input. Expected get(string), put(string, string) or exit")
-		// }
-		// jobId++
 	}
 	wg.Wait()
 	fmt.Println("exiting program...")

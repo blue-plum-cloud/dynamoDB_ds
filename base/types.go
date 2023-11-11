@@ -4,14 +4,16 @@ import (
 	"config"
 	"constants"
 	"fmt"
+	"sync"
 	"sync/atomic"
 )
 
 type Client struct {
-	Id        int
-	Close     chan struct{}
-	Client_ch chan Message
-	AwaitUids map[int](*atomic.Bool)
+	Id         int
+	Close      chan struct{}
+	Client_ch  chan Message
+	AwaitUids  map[int](*atomic.Bool)
+	awaitMutex sync.Mutex
 }
 
 type Message struct {

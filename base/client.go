@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -41,27 +40,40 @@ func ParseGetArg(getRegex string, input string) (string, int, error) {
 	}
 	return matches[1], client, nil
 }
+func ParseKillArg(killRegex string, input string) (int, string, error) {
 
-func ParseOneArg(input string, commandName string) (string, error) {
-	trimString := fmt.Sprintf("%s(", commandName)
-	key := strings.TrimSuffix(strings.TrimPrefix(input, trimString), ")")
-	parts := strings.SplitN(key, ",", 2)
-	if len(parts) != 1 {
-		return "", errors.New("Invalid input for get. Expect get(string)")
+	re := regexp.MustCompile(killRegex)
+	matches := re.FindStringSubmatch(input)
+
+	killmsg := "invalid kill command format, must be kill(int,int);"
+
+	if len(matches) != 3 {
+		fmt.Println("not enough arguments in kill")
+		return 0, "", errors.New(killmsg)
 	}
-	return key, nil
+
+	node, err := strconv.Atoi(matches[1])
+	if err != nil {
+		fmt.Println(err)
+		return 0, "", errors.New(killmsg)
+	}
+
+	return node, matches[2], nil
 }
 
-func ParseTwoArgs(input string, commandName string) (string, string, error) {
-	trimString := fmt.Sprintf("%s(", commandName)
-	remainder := strings.TrimSuffix(strings.TrimPrefix(input, trimString), ")")
-	parts := strings.SplitN(remainder, ",", 2)
-	if len(parts) != 2 {
-		return "", "", errors.New("Invalid input for put. Expect put(string, string)")
+func ParseRevArg(revRegex string, input string) (int, error) {
+	re := regexp.MustCompile(revRegex)
+	matches := re.FindStringSubmatch(input)
+
+	if len(matches) != 2 {
+		return 0, errors.New("invalid revive command format, must be revive(int);")
 	}
-	key := strings.TrimSpace(parts[0])
-	value := strings.TrimSpace(parts[1])
-	return key, value, nil
+
+	node, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return 0, errors.New("invalid revive command format, must be revive(int);")
+	}
+	return node, nil
 }
 
 // Separate routine from client CLI
@@ -76,7 +88,7 @@ func (client *Client) StartListening(c *config.Config) {
 			var debugMsg bytes.Buffer // allow appending of messages
 			debugMsg.WriteString(fmt.Sprintf("Start: %s ", msg.ToString(-1)))
 
-			if client.AwaitUids[msg.JobId].Load() { // timeout reached for job id
+			if !client.AwaitUids[msg.JobId].Load() { // timeout reached for job id
 				delete(client.AwaitUids, msg.JobId)
 
 			} else {
