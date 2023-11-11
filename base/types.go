@@ -210,6 +210,40 @@ func (bst *BST) leftMostNode(node *TreeNode) *TreeNode {
 	return current
 }
 
+func (bst *BST) getPrev(node *TreeNode) *TreeNode {
+	// If the left subtree exists, return the rightmost node of the left subtree
+	if node.Left != nil {
+		return bst.rightMostNode(node.Left)
+	}
+
+	// If no left subtree, find the nearest ancestor for which
+	// the given node would be in the right subtree
+	var predecessor *TreeNode
+	ancestor := bst.Root
+	for ancestor != node {
+		if node.Token.range_start > ancestor.Token.range_start {
+			predecessor = ancestor
+			ancestor = ancestor.Right
+		} else {
+			ancestor = ancestor.Left
+		}
+	}
+
+	// If predecessor is nil, return the rightmost node in the tree
+	if predecessor == nil {
+		return bst.rightMostNode(bst.Root)
+	}
+	return predecessor
+}
+
+func (bst *BST) rightMostNode(node *TreeNode) *TreeNode {
+	current := node
+	for current.Right != nil {
+		current = current.Right
+	}
+	return current
+}
+
 func (bst *BST) PrintBST() {
 	fmt.Printf("%v\n", bst.Root.Token)
 	node := bst.getNext(bst.Root)

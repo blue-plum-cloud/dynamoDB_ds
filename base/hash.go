@@ -31,6 +31,35 @@ func hashInRange(hashStr string, lowerBound string, upperBound string) bool {
 	return hashInt.Cmp(lower) >= 0 && hashInt.Cmp(upper) <= 0
 }
 
+func populatePreferenceList(node *Node, startNode *TreeNode, windowMap map[int]struct{}, pref []int, c *config.Config) ([]int, *TreeNode) {
+
+	var temp *TreeNode
+	var endNode *TreeNode = startNode
+
+	temp = node.tokenStruct.getPrev(endNode)
+	for endNode != nil && len(pref) < c.N {
+		// Cannot find more unique physical node
+		if endNode == temp {
+			break
+		}
+		pid := endNode.Token.phy_id
+		if _, exists := windowMap[pid]; !exists {
+			pref = append(pref, pid)
+			windowMap[pid] = struct{}{}
+		}
+		endNode = node.tokenStruct.getNext(endNode)
+	}
+
+	return pref, endNode
+}
+
+func logPreferenceList(tokenID int, prefList []int, c *config.Config) {
+	if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
+		fmt.Printf("Preference list for token %d: \n", tokenID)
+		fmt.Println(prefList)
+	}
+}
+
 func InitializeTokens(phy_nodes []*Node, c *config.Config) {
 	fmt.Println("Initializing tokens...")
 	maxValue := new(big.Int)
@@ -112,71 +141,52 @@ func InitializeTokens(phy_nodes []*Node, c *config.Config) {
 	}
 
 	// Make preference list copy for each node
-	rangeMap := make(map[*Token][]int)
+	if len(phy_nodes) > 0 {
+		rangeMap := make(map[*Token][]int)
+		node := phy_nodes[0]
+		startNode := node.tokenStruct.Root
+		if startNode != nil {
+			var pref []int
+			windowMap := make(map[int]struct{})
+			pref, endNode := populatePreferenceList(node, node.tokenStruct.Root, windowMap, pref, c)
+			rangeMap[node.tokenStruct.Root.Token] = make([]int, len(pref))
+			copy(rangeMap[node.tokenStruct.Root.Token], pref)
+			logPreferenceList(startNode.Token.GetID(), pref, c)
 
-	node := phy_nodes[0]
-	startNode := node.tokenStruct.Root
-	endNode := node.tokenStruct.Root
-	windowMap := make(map[int]struct{})
-	var pref []int
+			cnt := 1
+			st := 0
 
-	// Initial population of the pref list
-	for endNode != nil && len(pref) < c.N {
-		pid := endNode.Token.phy_id
-		if _, exists := windowMap[pid]; !exists {
-			pref = append(pref, pid)
-			windowMap[pid] = struct{}{}
-		}
-		endNode = node.tokenStruct.getNext(endNode)
-	}
+			for cnt < c.NUM_TOKENS {
+				startNode = node.tokenStruct.getNext(startNode)
 
-	rangeMap[startNode.Token] = make([]int, c.N)
-	copy(rangeMap[startNode.Token], pref)
-	if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
-		fmt.Printf("Preference list for token %d: \n", startNode.Token.GetID())
-		fmt.Println(rangeMap[startNode.Token])
-	}
+				if len(pref) > 0 {
+					st = pref[0]
+					pref = pref[1:]
 
-	cnt := 1
-	st := 0
-	for cnt < c.NUM_TOKENS {
-		startNode = node.tokenStruct.getNext(startNode)
-		st = pref[0]
-		pref = pref[1:]
+					delete(windowMap, st)
+				}
 
-		delete(windowMap, st)
+				pref, endNode = populatePreferenceList(node, endNode, windowMap, pref, c)
 
-		// Keep moving nextNode to find new unique phyIDs to fill the window
-		for len(pref) < c.N {
-			pid := endNode.Token.phy_id
-			if _, exists := windowMap[pid]; !exists {
-				pref = append(pref, pid)
-				windowMap[pid] = struct{}{}
+				rangeMap[startNode.Token] = make([]int, len(pref))
+				copy(rangeMap[startNode.Token], pref)
+				logPreferenceList(startNode.Token.GetID(), pref, c)
+				cnt++
 			}
-			endNode = node.tokenStruct.getNext(endNode)
+
+			if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
+				fmt.Println("Overall preference list: ")
+				fmt.Println(rangeMap)
+			}
+
+			for _, node := range phy_nodes {
+				newMap := make(map[*Token][]int)
+				for key, value := range rangeMap {
+					newMap[key] = append([]int(nil), value...)
+				}
+				node.prefList = rangeMap
+			}
 		}
-
-		rangeMap[startNode.Token] = make([]int, c.N)
-		copy(rangeMap[startNode.Token], pref)
-		if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
-			fmt.Printf("Preference list for token %d: \n", startNode.Token.GetID())
-			fmt.Println(rangeMap[startNode.Token])
-		}
-		cnt++
-	}
-
-	if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
-		fmt.Println("Overall preference list: ")
-		fmt.Println(rangeMap)
-	}
-
-	for _, node := range phy_nodes {
-		newMap := make(map[*Token][]int)
-		for key, value := range rangeMap {
-			newMap[key] = append([]int(nil), value...)
-		}
-		node.prefList = rangeMap
-
 	}
 
 	if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
