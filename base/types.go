@@ -15,7 +15,7 @@ type Message struct {
 
 	SrcID   int     // for inter-node
 	ObjData *Object // for inter-node
-	
+
 	HandoffToken *Token // for inter-node
 }
 
@@ -73,7 +73,8 @@ type Node struct {
 
 	awaitAck    map[int](*atomic.Bool) // flags to check on timeout routines
 	tokenStruct BST
-	
+	prefList    map[*Token][]int
+
 	//state machine for Get()
 	numReads int
 }

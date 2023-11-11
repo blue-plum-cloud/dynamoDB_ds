@@ -395,6 +395,10 @@ func CreateNodes(client_ch chan Message, close_ch chan struct{}, c *config.Confi
 	numNodes := c.NUM_NODES
 	var nodeGroup []*Node
 	for j := 0; j < numNodes; j++ {
+		pl := make(map[*Token][]int, c.NUM_TOKENS)
+		for i := range pl {
+			pl[i] = make([]int, c.N)
+		}
 
 		//make j nodes
 		node := Node{
@@ -408,6 +412,7 @@ func CreateNodes(client_ch chan Message, close_ch chan struct{}, c *config.Confi
 			client_ch:   client_ch,
 			close_ch:    close_ch,
 			awaitAck:    make(map[int](*atomic.Bool)),
+			prefList:    pl,
 		}
 
 		nodeGroup = append(nodeGroup, &node)
@@ -424,6 +429,7 @@ func CreateNodes(client_ch chan Message, close_ch chan struct{}, c *config.Confi
 			(*target_machine).channels[machine.GetID()] = receive_channel
 		}
 	}
+
 	return nodeGroup
 
 }
