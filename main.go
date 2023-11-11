@@ -3,6 +3,7 @@ package main
 import (
 	"base"
 	"bufio"
+	"bytes"
 	"config"
 	"constants"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -26,38 +28,6 @@ func ParseOneArg(input string, commandName string) (string, error) {
 	return key, nil
 }
 
-func ListenGetReply(key string, client_ch chan base.Message, c *config.Config) {
-	select {
-	case value := <-client_ch: // reply received in time
-		hashkey := base.ComputeMD5(key)
-		if value.Key != hashkey {
-			panic(fmt.Sprintf("wrong key! expected: %s actual: %s", hashkey, value.Key))
-		}
-
-		if value.Data != "" {
-			fmt.Println("Value is: ", value.Data)
-			//clear remaining messages in the channel after processing the first msg
-			clearChannel(client_ch)
-		} else {
-			fmt.Println("Data not found!")
-		}
-
-	case <-time.After(time.Duration(c.CLIENT_GET_TIMEOUT_MS) * time.Millisecond): // timeout reached
-		fmt.Println("Get Timeout reached")
-	}
-
-}
-
-func clearChannel(ch chan base.Message) {
-	for {
-		select {
-		case <-ch:
-		default:
-			return
-		}
-	}
-}
-
 func ParseTwoArgs(input string, commandName string) (string, string, error) {
 	trimString := fmt.Sprintf("%s(", commandName)
 	remainder := strings.TrimSuffix(strings.TrimPrefix(input, trimString), ")")
@@ -70,17 +40,74 @@ func ParseTwoArgs(input string, commandName string) (string, string, error) {
 	return key, value, nil
 }
 
-func ListenPutReply(key string, value string, client_ch chan base.Message, c *config.Config) {
-	select {
-	case ack := <-client_ch: // reply received in time
-		if ack.Key != key {
-			panic("wrong key!")
+// Separate routine from client CLI
+// Single and only source of client channel consume
+// Messages are tracked by JobId to handle multiple requests for same node / dropped requests
+func StartListening(close_ch chan struct{}, client_ch chan base.Message, awaitUids map[int](*atomic.Bool), c *config.Config) {
+	for {
+		select {
+		case <-close_ch:
+			return
+		case msg := <-client_ch:
+			var debugMsg bytes.Buffer // allow appending of messages
+			debugMsg.WriteString(fmt.Sprintf("Start: %s ", msg.ToString(-1)))
+
+			if !awaitUids[msg.JobId].Load() { // timeout reached for job id
+				delete(awaitUids, msg.JobId)
+
+			} else {
+				awaitUids[msg.JobId].Store(false)
+
+				switch msg.Command {
+
+				case constants.CLIENT_ACK_READ:
+					// TODO: validity check
+					fmt.Printf("COMPLETED Jobid=%d Command=%s: (%s, %s)\n",
+						msg.JobId, constants.GetConstantString(msg.Command), msg.Key, msg.Data)
+
+				case constants.CLIENT_ACK_WRITE:
+					// TODO: validity check
+					fmt.Printf("COMPLETED Jobid=%d Command=%s: (%s, %s)\n",
+						msg.JobId, constants.GetConstantString(msg.Command), msg.Key, msg.Data)
+
+				default:
+					panic("Unexpected ACK received in client_ch.")
+				}
+			}
+
+			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
+				fmt.Printf("%s\n", debugMsg.String())
+			}
 		}
+	}
+}
 
-		fmt.Println("Value stored: ", value, " with key: ", key)
+// Separate routine from client CLI
+// Constantly consume client_ch even after timeout
+// !!!! Loops infinitely if server drops request and does not ACK it
+func StartTimeout(awaitUids map[int](*atomic.Bool), jobId int, command int, timeout_ms int, close_ch chan struct{}) {
+	if _, exists := awaitUids[jobId]; !exists {
+		awaitUids[jobId] = new(atomic.Bool)
+	}
+	awaitUids[jobId].Store(true)
 
-	case <-time.After(time.Duration(c.CLIENT_PUT_TIMEOUT_MS) * time.Millisecond): // timeout reached
-		fmt.Println("Put Timeout reached")
+	reqTime := time.Now()
+
+	for {
+		select {
+		case <-close_ch:
+			return
+		default:
+			if !(awaitUids[jobId].Load()) {
+				delete(awaitUids, jobId)
+				return
+			}
+			if time.Since(reqTime) > time.Duration(timeout_ms)*time.Millisecond {
+				fmt.Printf("TIMEOUT REACHED: Jobid=%d Command=%s\n", jobId, constants.GetConstantString(command))
+				awaitUids[jobId].Store(false)
+				return
+			}
+		}
 	}
 }
 
@@ -175,19 +202,24 @@ func main() {
 	//create close_ch for goroutines
 	close_ch := make(chan struct{})
 	client_ch := make(chan base.Message)
+	awaitUids := make(map[int](*atomic.Bool))
 
 	//node and token initialization
-	phy_nodes := base.CreateNodes(client_ch, close_ch, &c)
+	phy_nodes := base.CreateNodes(close_ch, &c)
 	base.InitializeTokens(phy_nodes, &c)
+
+	// running jobId
+	jobId := 0
 
 	//run nodes
 	for i := range phy_nodes {
 		wg.Add(1)
 		go phy_nodes[i].Start(&wg, &c)
 	}
+	go StartListening(close_ch, client_ch, awaitUids, &c)
 
 	for {
-		fmt.Print("\nEnter command: ")
+		fmt.Print("\nEnter command: \n")
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input) // Remove trailing newline
 
@@ -201,9 +233,10 @@ func main() {
 
 			node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
-			channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_READ, SrcID: -1}
+			channel <- base.Message{JobId: jobId, Key: key, Command: constants.CLIENT_REQ_READ, SrcID: -1, Client_Ch: client_ch}
 
-			ListenGetReply(key, client_ch, &c)
+			// TODO: blocking for now, never handle concurrent get/put to same node
+			StartTimeout(awaitUids, jobId, constants.CLIENT_REQ_READ, c.CLIENT_GET_TIMEOUT_MS, close_ch)
 
 		} else if strings.HasPrefix(input, "put(") && strings.HasSuffix(input, ")") {
 			key, value, err := ParseTwoArgs(input, "put")
@@ -214,9 +247,10 @@ func main() {
 
 			node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
-			channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, SrcID: -1}
+			channel <- base.Message{JobId: jobId, Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, SrcID: -1, Client_Ch: client_ch}
 
-			ListenPutReply(key, value, client_ch, &c)
+			// TODO: blocking for now, never handle concurrent get/put to same node
+			StartTimeout(awaitUids, jobId, constants.CLIENT_REQ_WRITE, c.CLIENT_GET_TIMEOUT_MS, close_ch)
 
 		} else if strings.HasPrefix(input, "kill(") && strings.HasSuffix(input, ")") {
 			nodeIdxString, duration, err := ParseTwoArgs(input, "kill")
@@ -228,7 +262,7 @@ func main() {
 			nodeIdx, _ := strconv.Atoi(nodeIdxString)
 			node := phy_nodes[nodeIdx]
 			channel := (*node).GetChannel()
-			channel <- base.Message{Command: constants.CLIENT_REQ_KILL, Data: duration, SrcID: -1}
+			channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_KILL, Data: duration, SrcID: -1, Client_Ch: client_ch}
 
 		} else if strings.HasPrefix(input, "revive(") && strings.HasSuffix(input, ")") {
 			nodeIdxString, err := ParseOneArg(input, "revive")
@@ -240,7 +274,7 @@ func main() {
 			nodeIdx, _ := strconv.Atoi(nodeIdxString)
 			node := phy_nodes[nodeIdx]
 			channel := (*node).GetChannel()
-			channel <- base.Message{Command: constants.CLIENT_REQ_REVIVE, SrcID: -1}
+			channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_REVIVE, SrcID: -1, Client_Ch: client_ch}
 
 		} else if input == "exit" {
 			close(close_ch)
@@ -269,6 +303,7 @@ func main() {
 		} else {
 			fmt.Println("Invalid input. Expected get(string), put(string, string) or exit")
 		}
+		jobId++
 	}
 	wg.Wait()
 	fmt.Println("exiting program...")

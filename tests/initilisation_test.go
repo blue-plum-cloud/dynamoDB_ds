@@ -26,7 +26,7 @@ func TestInitilisationEqual(t *testing.T) {
 			c := config.InstantiateConfig()
 			c.NUM_NODES = tt.numNodes
 			c.NUM_TOKENS = tt.numTokens
-			phy_nodes, close_ch := setUpNodes(&c)
+			phy_nodes, close_ch, _ := setUpNodes(&c)
 
 			// Check each node has 1 token
 			for _, node := range phy_nodes {
@@ -62,7 +62,7 @@ func TestInitilisationTokenGTNodes(t *testing.T) {
 			c := config.InstantiateConfig()
 			c.NUM_NODES = tt.numNodes
 			c.NUM_TOKENS = tt.numTokens
-			phy_nodes, close_ch := setUpNodes(&c)
+			phy_nodes, close_ch, _ := setUpNodes(&c)
 
 			// Check each node has correct number of tokens
 			for i, node := range phy_nodes {
@@ -99,7 +99,7 @@ func TestInitilisationTokensLTNodes(t *testing.T) {
 			c := config.InstantiateConfig()
 			c.NUM_NODES = tt.numNodes
 			c.NUM_TOKENS = tt.numTokens
-			phy_nodes, close_ch := setUpNodes(&c)
+			phy_nodes, close_ch, _ := setUpNodes(&c)
 
 			// Check nodes < i get 1 token and nodes >= i get no tokens
 			for i, node := range phy_nodes {
@@ -136,7 +136,7 @@ func TestInitilisationZeroTokens(t *testing.T) {
 			c := config.InstantiateConfig()
 			c.NUM_NODES = tt.numNodes
 			c.NUM_TOKENS = tt.numTokens
-			phy_nodes, close_ch := setUpNodes(&c)
+			phy_nodes, close_ch, _ := setUpNodes(&c)
 
 			// Check nodes < i get 1 token and nodes >= i get no tokens
 			for _, node := range phy_nodes {
@@ -168,7 +168,7 @@ func TestInitilisationZeroNodes(t *testing.T) {
 			c := config.InstantiateConfig()
 			c.NUM_NODES = tt.numNodes
 			c.NUM_TOKENS = tt.numTokens
-			phy_nodes, close_ch := setUpNodes(&c)
+			phy_nodes, close_ch, _ := setUpNodes(&c)
 
 			// Check nodes < i get 1 token and nodes >= i get no tokens
 			for _, node := range phy_nodes {
@@ -200,7 +200,7 @@ func TestInitilisationNegativeNodes(t *testing.T) {
 			c := config.InstantiateConfig()
 			c.NUM_NODES = tt.numNodes
 			c.NUM_TOKENS = tt.numTokens
-			phy_nodes, close_ch := setUpNodes(&c)
+			phy_nodes, close_ch, _ := setUpNodes(&c)
 
 			if len(phy_nodes) != 0 {
 				t.Errorf("got: %d, expected 0 phy_nodes\n", len(phy_nodes))
@@ -228,7 +228,7 @@ func TestInitilisationNegativeTokens(t *testing.T) {
 			c := config.InstantiateConfig()
 			c.NUM_NODES = tt.numNodes
 			c.NUM_TOKENS = tt.numTokens
-			phy_nodes, close_ch := setUpNodes(&c)
+			phy_nodes, close_ch, _ := setUpNodes(&c)
 
 			// Check nodes < i get 1 token and nodes >= i get no tokens
 			for _, node := range phy_nodes {

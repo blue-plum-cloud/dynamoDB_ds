@@ -21,6 +21,9 @@ func (n *Node) busyWait(duration int, c *config.Config) {
 
 	for {
 		select {
+		case <-n.close_ch:
+			return
+
 		case msg := <-n.rcv_ch: // consume rcv_ch and throw
 			if msg.Command == constants.CLIENT_REQ_REVIVE {
 				if c.DEBUG_LEVEL >= constants.INFO {
@@ -60,7 +63,7 @@ func (n *Node) restoreHandoff(token *Token, msg Message, c *config.Config) {
 			return
 		}
 		if time.Since(reqTime) > time.Duration(config.SET_DATA_TIMEOUT_MS)*time.Millisecond {
-			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
+			if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
 				fmt.Printf("restoreHandoff: %d->%d timeout reached. Retrying...\n", n.GetID(), token.phy_id)
 			}
 			n.channels[token.phy_id] <- msg
@@ -88,10 +91,10 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 
 			switch msg.Command {
 			case constants.CLIENT_REQ_READ:
-				go n.Get(msg.Key, c) // nicer debug message (CLIENT_REQ_READ before subsequent handling messages)
+				go n.Get(msg, c) // nicer debug message (CLIENT_REQ_READ before subsequent handling messages)
 
 			case constants.CLIENT_REQ_WRITE:
-				go n.Put(msg.Key, msg.Data, c)
+				go n.Put(msg, msg.Data, c)
 
 			case constants.CLIENT_REQ_KILL:
 				duration, err := strconv.Atoi(strings.TrimSpace(msg.Data))
@@ -102,7 +105,7 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 
 			case constants.SET_DATA:
 				n.data[msg.Key] = msg.ObjData
-				n.channels[msg.SrcID] <- Message{Command: constants.ACK_SET_DATA, Key: msg.Key, SrcID: n.GetID()}
+				n.channels[msg.SrcID] <- Message{JobId: msg.JobId, Command: constants.ACK_SET_DATA, Key: msg.Key, SrcID: n.GetID()}
 
 			case constants.BACK_DATA:
 				backupID := msg.HandoffToken.phy_id
@@ -110,7 +113,7 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 					n.backup[backupID] = make(map[string]*Object)
 				}
 				n.backup[backupID][msg.Key] = msg.ObjData
-				n.channels[msg.SrcID] <- Message{Command: constants.ACK_BACK_DATA, Key: msg.Key, SrcID: n.GetID()}
+				n.channels[msg.SrcID] <- Message{JobId: msg.JobId, Command: constants.ACK_BACK_DATA, Key: msg.Key, SrcID: n.GetID()}
 				msg.Command = constants.SET_DATA
 				msg.SrcID = n.GetID()
 				go n.restoreHandoff(msg.HandoffToken, msg, c)
@@ -118,14 +121,14 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 			case constants.READ_DATA: //coordinator requested to read data, so send it back
 				//return data
 				obj := n.data[msg.Key]
-				n.channels[msg.SrcID] <- Message{Command: constants.READ_DATA_ACK, Key: msg.Key, SrcID: n.GetID(), ObjData: obj}
+				fmt.Printf("[%d] send acknowledgement\n", n.id)
+				n.channels[msg.SrcID] <- Message{JobId: msg.JobId, Command: constants.READ_DATA_ACK, Key: msg.Key, SrcID: n.GetID(), ObjData: obj, Client_Ch: msg.Client_Ch}
 
 			case constants.READ_DATA_ACK:
 				debugMsg.WriteString(fmt.Sprintf("numReads: %d", n.numReads))
 				if n.numReads == c.R {
 					n.reconcile(n.data[msg.Key], msg.ObjData)
-					fmt.Println(msg.Key)
-					n.client_ch <- Message{Command: constants.CLIENT_ACK_READ, Key: msg.Key, Data: n.data[msg.Key].data, SrcID: n.GetID()}
+					msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_READ, Key: msg.Key, Data: n.data[msg.Key].data, SrcID: n.GetID()}
 				} else {
 					n.reconcile(n.data[msg.Key], msg.ObjData)
 				}
@@ -223,12 +226,13 @@ func FindNode(key string, phy_nodes []*Node, c *config.Config) *Node {
 // internal function
 // Can refactor in the future to use dict instead so we know what are the key and value
 // rather than accessing it by index which we not sure which correspond to which
-func (n *Node) Put(key string, value string, c *config.Config) {
+func (n *Node) Put(msg Message, value string, c *config.Config) {
 	replicationCount := GetReplicationCount(c)
 
 	W := getWCount(c)
+	ackSent := false
 
-	hashKey := ComputeMD5(key)
+	hashKey := ComputeMD5(msg.Key)
 	n.increment_vclk()
 	copy_vclk := n.copy_vclk()
 
@@ -250,8 +254,9 @@ func (n *Node) Put(key string, value string, c *config.Config) {
 		fmt.Printf("Put: Stored to (corodinator) token %d, node=%d\n", initToken.GetID(), initToken.phy_id)
 	}
 
-	if replicationCount == 0 {
-		n.client_ch <- Message{Command: constants.CLIENT_ACK_WRITE, Key: key, SrcID: n.GetID()}
+	if replicationCount <= 1 {
+		ackSent = true
+		msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_WRITE, Key: msg.Key, Data: msg.Data, SrcID: n.GetID()}
 	}
 
 	successfulReplication := 1
@@ -279,7 +284,7 @@ func (n *Node) Put(key string, value string, c *config.Config) {
 		if _, visited := visitedNodes[curToken.phy_id]; !visited {
 			isHandoff := len(visitedNodes) > replicationCount-1 // counts coordinator node
 			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
-			msg := &Message{Command: constants.SET_DATA, Key: hashKey, ObjData: &newObj, SrcID: n.GetID()}
+			msg := &Message{JobId: msg.JobId, Command: constants.SET_DATA, Key: hashKey, ObjData: &newObj, SrcID: n.GetID()}
 			if isHandoff {
 				msg.Command = constants.BACK_DATA
 				msg.HandoffToken = handoffQueue[0]
@@ -300,8 +305,9 @@ func (n *Node) Put(key string, value string, c *config.Config) {
 			visitedNodes[curToken.phy_id] = struct{}{}
 		}
 
-		if successfulReplication == W {
-			n.client_ch <- Message{Command: constants.CLIENT_ACK_WRITE, Key: key, SrcID: n.GetID()}
+		if successfulReplication == W && !ackSent {
+			ackSent = true
+			msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_WRITE, Key: msg.Key, Data: msg.Data, SrcID: n.GetID()}
 		}
 	}
 }
@@ -356,9 +362,9 @@ func compareVC(a, b []int) int {
 }
 
 // internal function GET
-func (n *Node) Get(key string, c *config.Config) {
+func (n *Node) Get(msg Message, c *config.Config) {
 	n.increment_vclk()
-	hashKey := ComputeMD5(key)
+	hashKey := ComputeMD5(msg.Key)
 
 	n.numReads = 1
 
@@ -381,7 +387,7 @@ func (n *Node) Get(key string, c *config.Config) {
 		}
 
 		if _, visited := visitedNodes[curToken.phy_id]; !visited {
-			n.channels[curToken.phy_id] <- Message{Command: constants.READ_DATA, Key: hashKey, SrcID: n.GetID()}
+			n.channels[curToken.phy_id] <- Message{JobId: msg.JobId, Command: constants.READ_DATA, Key: hashKey, SrcID: n.GetID(), Client_Ch: msg.Client_Ch}
 			visitedNodes[curToken.phy_id] = struct{}{}
 			reqCounter++
 		}
@@ -389,7 +395,7 @@ func (n *Node) Get(key string, c *config.Config) {
 
 }
 
-func CreateNodes(client_ch chan Message, close_ch chan struct{}, c *config.Config) []*Node {
+func CreateNodes(close_ch chan struct{}, c *config.Config) []*Node {
 	fmt.Println("Constructing machines...")
 
 	numNodes := c.NUM_NODES
@@ -409,7 +415,6 @@ func CreateNodes(client_ch chan Message, close_ch chan struct{}, c *config.Confi
 			data:        make(map[string]*Object),
 			backup:      make(map[int](map[string]*Object)),
 			tokenStruct: BST{},
-			client_ch:   client_ch,
 			close_ch:    close_ch,
 			awaitAck:    make(map[int](*atomic.Bool)),
 			prefList:    pl,
