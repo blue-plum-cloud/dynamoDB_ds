@@ -266,8 +266,18 @@ func (n *Node) Put(key string, value string, c *config.Config) {
 			break
 		}
 
+		// Notes for implementation
+
+		// checking the visited concurrently in the batch of N-1 rep
+		// need to change the structure a bit since, we are not traversing one by one anymore
+		// need to implement queue sistem for the token that failed to replicate because
+		// they have non-distinct phy node with prev one, with this need to
+		// implement some way of locking as well currently we are using syc/atomic for locking
+		// disadvantages of this is currently we are using timeout on ack so if the channel is
+		// blocked or busy for sometime, the implementation might get screwed
+
 		if _, visited := visitedNodes[curToken.phy_id]; !visited {
-			isHandoff := len(visitedNodes) > replicationCount - 1 // counts coordinator node
+			isHandoff := len(visitedNodes) > replicationCount-1 // counts coordinator node
 			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
 			msg := &Message{Command: constants.SET_DATA, Key: hashKey, ObjData: &newObj, SrcID: n.GetID()}
 			if isHandoff {
