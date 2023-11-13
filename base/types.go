@@ -76,6 +76,7 @@ type Node struct {
 
 	awaitAck    map[int](*atomic.Bool) // flags to check on timeout routines
 	tokenStruct BST
+	prefList    map[*Token][]int
 
 	//state machine for Get()
 	numReads int
@@ -208,6 +209,40 @@ func (bst *BST) leftMostNode(node *TreeNode) *TreeNode {
 	current := node
 	for current.Left != nil {
 		current = current.Left
+	}
+	return current
+}
+
+func (bst *BST) getPrev(node *TreeNode) *TreeNode {
+	// If the left subtree exists, return the rightmost node of the left subtree
+	if node.Left != nil {
+		return bst.rightMostNode(node.Left)
+	}
+
+	// If no left subtree, find the nearest ancestor for which
+	// the given node would be in the right subtree
+	var predecessor *TreeNode
+	ancestor := bst.Root
+	for ancestor != node {
+		if node.Token.range_start > ancestor.Token.range_start {
+			predecessor = ancestor
+			ancestor = ancestor.Right
+		} else {
+			ancestor = ancestor.Left
+		}
+	}
+
+	// If predecessor is nil, return the rightmost node in the tree
+	if predecessor == nil {
+		return bst.rightMostNode(bst.Root)
+	}
+	return predecessor
+}
+
+func (bst *BST) rightMostNode(node *TreeNode) *TreeNode {
+	current := node
+	for current.Right != nil {
+		current = current.Right
 	}
 	return current
 }
