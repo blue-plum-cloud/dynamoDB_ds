@@ -97,6 +97,60 @@ func printConfig(c *config.Config) {
 	fmt.Println("----------------------------------------")
 }
 
+func printStatus(phy_nodes []*base.Node) {
+	fmt.Println("====== STATUS ======")
+	for _, node := range phy_nodes {
+		tokens := []int{}
+		for _, token := range node.GetTokens() {
+			tokens = append(tokens, token.GetID())
+		}
+		fmt.Printf("[Node %d] | Token(s): %v\n", node.GetID(), tokens)
+		fmt.Println("> DATA")
+		for key, value := range node.GetAllData() {
+			fmt.Printf("	[%s] %s\n", key, value.ToString())
+		}
+		fmt.Println("> BACKUPS")
+		for nodeId, value := range node.GetAllBackup() {
+			fmt.Printf("Backup for node %d", nodeId)
+			for key, valueObj := range value {
+				fmt.Printf("	[%s] %s\n", key, valueObj.ToString())
+			}
+		}
+		fmt.Println("===============")
+	}
+}
+
+// checker to ensure multiple commands only allow put() or get()
+func checkCommands(rawCommands []string, putRegex string, getRegex string) ([]string, bool) {
+	allCommands := make([]string, 0)
+	for i, cmd := range rawCommands {
+		if i == len(rawCommands)-1 {
+			break
+		}
+		cmd = strings.TrimSpace(cmd)
+		matchedPut, _ := regexp.MatchString(putRegex, cmd)
+		matchedGet, _ := regexp.MatchString(getRegex, cmd)
+		if !matchedPut && !matchedGet {
+			fmt.Println("Command chain should only consist of put() or get() commands!")
+			return []string{}, false
+		}
+		allCommands = append(allCommands, cmd)
+
+	}
+	return allCommands, true
+}
+
+func generateClient(clients map[int]*base.Client, client_id int, close_ch chan struct{}, c *config.Config) {
+	clients[client_id] = &base.Client{
+		Id:        client_id,
+		Close:     close_ch,
+		Client_ch: make(chan base.Message),
+		AwaitUids: make(map[int]*atomic.Bool)}
+	go clients[client_id].StartListening(c)
+
+	fmt.Printf("create client %d \n", client_id)
+}
+
 func main() {
 	fmt.Println("Starting the application...")
 	reader := bufio.NewReader(os.Stdin)
@@ -131,129 +185,160 @@ func main() {
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input) // Remove trailing newline
 
+		rawCommands := strings.Split(input, ";")
+		// fmt.Println(rawCommands[0])
+
 		// Regular expressions to match the commands
-		putRegex := `^put\(([^,]+),([^)]+)\) (\d+);$`
-		getRegex := `^get\(([^)]+)\) (\d+);$`
-		killRegex := `kill\((\d+),\s?(\d+)\);`
-		revRegex := `revive\((\d+)\);`
+		putRegex := `^put\(([^,]+),([^)]+)\) (\d+)`
+		getRegex := `^get\(([^)]+)\) (\d+)`
+		killRegex := `kill\((\d+),\s?(\d+)\)`
+		revRegex := `revive\((\d+)\)`
 
-		if input == "exit;" {
-			close(close_ch)
-			break
-		}
-
-		if matched, _ := regexp.MatchString(putRegex, input); matched {
-			//put
-			key, value, client_id, err := base.ParsePutArg(putRegex, input)
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-			client, exists := clients[client_id]
-
-			if !exists {
-				clients[client_id] = &base.Client{
-					Id:        client_id,
-					Close:     close_ch,
-					Client_ch: make(chan base.Message),
-					AwaitUids: make(map[int]*atomic.Bool)}
-				go clients[client_id].StartListening(&c)
-
-				fmt.Printf("create client %d \n", client_id)
-				// client = clients[client_id]
-			}
-
-			client = clients[client_id]
-			node := base.FindNode(key, phy_nodes, &c)
-			channel := (*node).GetChannel()
-			newJob := jobId
-
-			channel <- base.Message{
-				JobId:     newJob,
-				Key:       key,
-				Command:   constants.CLIENT_REQ_WRITE,
-				Data:      value,
-				SrcID:     client_id,
-				Client_Ch: client.Client_ch}
-			client.StartTimeout(newJob, constants.CLIENT_REQ_WRITE, c.CLIENT_GET_TIMEOUT_MS)
-		} else if matched, _ := regexp.MatchString(getRegex, input); matched {
-			//get
-			key, client_id, err := base.ParseGetArg(getRegex, input)
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-			client, exists := clients[client_id]
-
-			if !exists {
-				clients[client_id] = &base.Client{
-					Id:        client_id,
-					Close:     close_ch,
-					Client_ch: make(chan base.Message),
-					AwaitUids: make(map[int]*atomic.Bool)}
-				go clients[client_id].StartListening(&c)
-
-				fmt.Printf("create client %d \n", client_id)
-			}
-
-			client = clients[client_id]
-
-			node := base.FindNode(key, phy_nodes, &c)
-			channel := (*node).GetChannel()
-			channel <- base.Message{
-				JobId:     jobId,
-				Key:       key,
-				Command:   constants.CLIENT_REQ_READ,
-				SrcID:     client_id,
-				Client_Ch: client.Client_ch}
-			fmt.Println("sending get to node ", node.GetID())
-			client.StartTimeout(jobId, constants.CLIENT_REQ_READ, c.CLIENT_GET_TIMEOUT_MS)
-
-		} else if input == "status;" {
-			fmt.Println("====== STATUS ======")
-			for _, node := range phy_nodes {
-				tokens := []int{}
-				for _, token := range node.GetTokens() {
-					tokens = append(tokens, token.GetID())
+		//consider single input
+		if len(rawCommands) == 1 {
+			if input == "exit" {
+				close(close_ch)
+				break
+			} else if input == "status" {
+				printStatus(phy_nodes)
+			} else if matched, _ := regexp.MatchString(putRegex, input); matched {
+				//put
+				key, value, client_id, err := base.ParsePutArg(putRegex, input)
+				if err != nil {
+					fmt.Println(err)
+					continue
 				}
-				fmt.Printf("[Node %d] | Token(s): %v\n", node.GetID(), tokens)
-				fmt.Println("> DATA")
-				for key, value := range node.GetAllData() {
-					fmt.Printf("	[%s] %s\n", key, value.ToString())
-				}
-				fmt.Println("> BACKUPS")
-				for nodeId, value := range node.GetAllBackup() {
-					fmt.Printf("Backup for node %d", nodeId)
-					for key, valueObj := range value {
-						fmt.Printf("	[%s] %s\n", key, valueObj.ToString())
-					}
-				}
-				fmt.Println("===============")
-			}
-		} else if matched, _ := regexp.MatchString(killRegex, input); matched {
-			nodeIdx, duration, err := base.ParseKillArg(killRegex, input)
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
+				client, exists := clients[client_id]
 
-			node := phy_nodes[nodeIdx]
-			channel := (*node).GetChannel()
-			channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_KILL, Data: duration, SrcID: -1}
-		} else if matched, _ := regexp.MatchString(revRegex, input); matched {
-			nodeIdx, err := base.ParseRevArg(revRegex, input)
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
+				if !exists {
+					generateClient(clients, client_id, close_ch, &c)
+				}
 
-			node := phy_nodes[nodeIdx]
-			channel := (*node).GetChannel()
-			channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_REVIVE, SrcID: -1}
+				client = clients[client_id]
+				node := base.FindNode(key, phy_nodes, &c)
+				channel := (*node).GetChannel()
+				newJob := jobId
+
+				channel <- base.Message{
+					JobId:     newJob,
+					Key:       key,
+					Command:   constants.CLIENT_REQ_WRITE,
+					Data:      value,
+					SrcID:     client_id,
+					Client_Ch: client.Client_ch}
+				client.StartTimeout(newJob, constants.CLIENT_REQ_WRITE, c.CLIENT_GET_TIMEOUT_MS)
+			} else if matched, _ := regexp.MatchString(getRegex, input); matched {
+				//get
+				key, client_id, err := base.ParseGetArg(getRegex, input)
+				if err != nil {
+					fmt.Println(err)
+					continue
+				}
+				client, exists := clients[client_id]
+
+				if !exists {
+					generateClient(clients, client_id, close_ch, &c)
+				}
+
+				client = clients[client_id]
+
+				node := base.FindNode(key, phy_nodes, &c)
+				channel := (*node).GetChannel()
+				channel <- base.Message{
+					JobId:     jobId,
+					Key:       key,
+					Command:   constants.CLIENT_REQ_READ,
+					SrcID:     client_id,
+					Client_Ch: client.Client_ch}
+				fmt.Println("sending get to node ", node.GetID())
+				client.StartTimeout(jobId, constants.CLIENT_REQ_READ, c.CLIENT_GET_TIMEOUT_MS)
+
+			} else if matched, _ := regexp.MatchString(killRegex, input); matched {
+				nodeIdx, duration, err := base.ParseKillArg(killRegex, input)
+				if err != nil {
+					fmt.Println(err)
+					continue
+				}
+
+				node := phy_nodes[nodeIdx]
+				channel := (*node).GetChannel()
+				channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_KILL, Data: duration, SrcID: -1}
+			} else if matched, _ := regexp.MatchString(revRegex, input); matched {
+				nodeIdx, err := base.ParseRevArg(revRegex, input)
+				if err != nil {
+					fmt.Println(err)
+					continue
+				}
+
+				node := phy_nodes[nodeIdx]
+				channel := (*node).GetChannel()
+				channel <- base.Message{JobId: jobId, Command: constants.CLIENT_REQ_REVIVE, SrcID: -1}
+			} else {
+				fmt.Println("Invalid input. Expected get(string) int;, put(string, string) int;, kill(int,int);, revive(int);, or exit;")
+			}
+			jobId++
 		} else {
-			fmt.Println("Invalid input. Expected get(string) int;, put(string, string) int;, kill(int,int);, revive(int);, or exit;")
+			cmds, is_correct := checkCommands(rawCommands, putRegex, getRegex)
+			if is_correct {
+				for _, input := range cmds {
+					if matched, _ := regexp.MatchString(putRegex, input); matched {
+						//put
+						key, value, client_id, err := base.ParsePutArg(putRegex, input)
+						if err != nil {
+							fmt.Println(err)
+							continue
+						}
+						client, exists := clients[client_id]
+
+						if !exists {
+							generateClient(clients, client_id, close_ch, &c)
+						}
+
+						client = clients[client_id]
+						node := base.FindNode(key, phy_nodes, &c)
+						channel := (*node).GetChannel()
+						newJob := jobId
+
+						channel <- base.Message{
+							JobId:     newJob,
+							Key:       key,
+							Command:   constants.CLIENT_REQ_WRITE,
+							Data:      value,
+							SrcID:     client_id,
+							Client_Ch: client.Client_ch}
+						client.StartTimeout(newJob, constants.CLIENT_REQ_WRITE, c.CLIENT_GET_TIMEOUT_MS)
+					} else if matched, _ := regexp.MatchString(getRegex, input); matched {
+						//get
+						key, client_id, err := base.ParseGetArg(getRegex, input)
+						if err != nil {
+							fmt.Println(err)
+							continue
+						}
+						client, exists := clients[client_id]
+
+						if !exists {
+							generateClient(clients, client_id, close_ch, &c)
+						}
+
+						client = clients[client_id]
+
+						node := base.FindNode(key, phy_nodes, &c)
+						channel := (*node).GetChannel()
+						channel <- base.Message{
+							JobId:     jobId,
+							Key:       key,
+							Command:   constants.CLIENT_REQ_READ,
+							SrcID:     client_id,
+							Client_Ch: client.Client_ch}
+						fmt.Println("sending get to node ", node.GetID())
+						client.StartTimeout(jobId, constants.CLIENT_REQ_READ, c.CLIENT_GET_TIMEOUT_MS)
+
+					}
+					jobId++
+				}
+			}
 		}
-		jobId++
+
 	}
 	wg.Wait()
 	fmt.Println("exiting program...")

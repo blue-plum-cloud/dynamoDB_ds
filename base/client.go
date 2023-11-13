@@ -135,7 +135,6 @@ func (client *Client) StartTimeout(jobId int, command int, timeout_ms int) {
 			return
 		default:
 			if !(client.AwaitUids[jobId].Load()) {
-				fmt.Println("here")
 				delete(client.AwaitUids, jobId)
 				return
 			}
