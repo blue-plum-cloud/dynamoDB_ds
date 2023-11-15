@@ -84,10 +84,14 @@ type Node struct {
 
 	awaitAck    map[int](*atomic.Bool) // flags to check on timeout routines
 	tokenStruct BST
-	prefList    map[*Token][]int
+	prefList    map[*Token][]*Token
 
 	//state machine for Get()
 	numReads int
+}
+
+func (n *Node) GetPrefList() map[*Token][]*Token {
+	return n.prefList
 }
 
 func (n *Node) GetChannel() chan Message {
@@ -122,6 +126,10 @@ type Token struct {
 
 func (t *Token) GetID() int {
 	return t.id
+}
+
+func (t *Token) GetPID() int {
+	return t.phy_id
 }
 
 func (t *Token) GetStartRange() string {
