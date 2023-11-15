@@ -401,9 +401,9 @@ func CreateNodes(close_ch chan struct{}, c *config.Config) []*Node {
 	numNodes := c.NUM_NODES
 	var nodeGroup []*Node
 	for j := 0; j < numNodes; j++ {
-		pl := make(map[*Token][]int, c.NUM_TOKENS)
+		pl := make(map[*Token][]*Token, c.NUM_TOKENS)
 		for i := range pl {
-			pl[i] = make([]int, c.N)
+			pl[i] = make([]*Token, c.N)
 		}
 
 		//make j nodes
