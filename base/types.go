@@ -21,6 +21,8 @@ type Message struct {
 	Command int
 	Key     string
 	Data    string // for client
+	Wcount  int
+	ackSent bool
 
 	SrcID   int     // for inter-node
 	ObjData *Object // for inter-node
@@ -82,15 +84,21 @@ type Node struct {
 	backup   map[int](map[string]*Object) // backup of key-value data stores
 	close_ch chan struct{}                //to close go channels properly
 
-	awaitAck    map[int](*atomic.Bool) // flags to check on timeout routines
-	tokenStruct BST
-	prefList    map[*Token][]*Token
+	awaitAck     map[int](*atomic.Bool) // flags to check on timeout routines
+	tokenStruct  BST
+	prefList     map[*Token][]*TreeNode
+	handOffQueue []*Token
 
 	//state machine for Get()
 	numReads int
+
+	//state machine for Put()
+	numReps int
+
+	mutex sync.Mutex
 }
 
-func (n *Node) GetPrefList() map[*Token][]*Token {
+func (n *Node) GetPrefList() map[*Token][]*TreeNode {
 	return n.prefList
 }
 
@@ -271,3 +279,23 @@ func (bst *BST) PrintBST() {
 		node = bst.getNext(node)
 	}
 }
+
+type Queue struct {
+	Data []*TreeNode
+	Lock sync.Mutex
+}
+
+func (q *Queue) Add(val *TreeNode) {
+	q.Data = append(q.Data, val)
+}
+
+func (q *Queue) Empty() bool {
+	if len(q.Data) == 0 {
+		return true
+	}
+	return false
+}
+
+// func(q *Queue) Clean() {
+// 	q.Data
+// }

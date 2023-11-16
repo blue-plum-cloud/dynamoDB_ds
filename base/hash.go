@@ -10,6 +10,8 @@ import (
 	"math/rand"
 )
 
+// TODO: fix precalculate prefList
+
 // Function to compute the MD5 hash of a string
 // use hash as a string mainly for convenience
 func ComputeMD5(data string) string {
@@ -31,7 +33,7 @@ func hashInRange(hashStr string, lowerBound string, upperBound string) bool {
 	return hashInt.Cmp(lower) >= 0 && hashInt.Cmp(upper) <= 0
 }
 
-func populatePreferenceList(node *Node, startNode *TreeNode, windowMap map[int]struct{}, pref []*Token, c *config.Config) ([]*Token, *TreeNode) {
+func populatePreferenceList(node *Node, startNode *TreeNode, windowMap map[int]struct{}, pref []*TreeNode, c *config.Config) ([]*TreeNode, *TreeNode) {
 
 	var temp *TreeNode
 	var endNode *TreeNode = startNode
@@ -44,7 +46,7 @@ func populatePreferenceList(node *Node, startNode *TreeNode, windowMap map[int]s
 		}
 		pid := endNode.Token.phy_id
 		if _, exists := windowMap[pid]; !exists {
-			pref = append(pref, endNode.Token)
+			pref = append(pref, endNode)
 			windowMap[pid] = struct{}{}
 		}
 		endNode = node.tokenStruct.getNext(endNode)
@@ -53,13 +55,13 @@ func populatePreferenceList(node *Node, startNode *TreeNode, windowMap map[int]s
 	return pref, endNode
 }
 
-func logPreferenceList(tokenID int, prefList []*Token, c *config.Config) {
+func logPreferenceList(tokenID int, prefList []*TreeNode, c *config.Config) {
 	if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
 		fmt.Printf("Preference list for token %d: \n", tokenID)
 		fmt.Println(prefList)
 		var ids []int
 		for _, tokens := range prefList {
-			ids = append(ids, tokens.phy_id)
+			ids = append(ids, tokens.Token.phy_id)
 		}
 		fmt.Println(ids)
 	}
@@ -147,19 +149,19 @@ func InitializeTokens(phy_nodes []*Node, c *config.Config) {
 
 	// Make preference list copy for each node
 	if len(phy_nodes) > 0 {
-		rangeMap := make(map[*Token][]*Token)
+		rangeMap := make(map[*Token][]*TreeNode)
 		node := phy_nodes[0]
 		startNode := node.tokenStruct.Root
 		if startNode != nil {
-			var pref []*Token
+			var pref []*TreeNode
 			windowMap := make(map[int]struct{})
 			pref, endNode := populatePreferenceList(node, node.tokenStruct.Root, windowMap, pref, c)
-			rangeMap[node.tokenStruct.Root.Token] = make([]*Token, len(pref))
+			rangeMap[node.tokenStruct.Root.Token] = make([]*TreeNode, len(pref))
 			copy(rangeMap[node.tokenStruct.Root.Token], pref)
 			logPreferenceList(startNode.Token.GetID(), pref, c)
 
 			cnt := 1
-			var st *Token
+			var st *TreeNode
 
 			for cnt < c.NUM_TOKENS {
 				startNode = node.tokenStruct.getNext(startNode)
@@ -168,12 +170,12 @@ func InitializeTokens(phy_nodes []*Node, c *config.Config) {
 					st = pref[0]
 					pref = pref[1:]
 
-					delete(windowMap, st.phy_id)
+					delete(windowMap, st.Token.phy_id)
 				}
 
 				pref, endNode = populatePreferenceList(node, endNode, windowMap, pref, c)
 
-				rangeMap[startNode.Token] = make([]*Token, len(pref))
+				rangeMap[startNode.Token] = make([]*TreeNode, len(pref))
 				copy(rangeMap[startNode.Token], pref)
 				logPreferenceList(startNode.Token.GetID(), pref, c)
 				cnt++
@@ -184,16 +186,16 @@ func InitializeTokens(phy_nodes []*Node, c *config.Config) {
 				for key, tokens := range rangeMap {
 					var ids []int
 					for _, token := range tokens {
-						ids = append(ids, token.phy_id)
+						ids = append(ids, token.Token.phy_id)
 					}
 					fmt.Printf("Token %p: %v\n", key, ids)
 				}
 			}
 
 			for _, node := range phy_nodes {
-				newMap := make(map[*Token][]*Token)
+				newMap := make(map[*Token][]*TreeNode)
 				for key, value := range rangeMap {
-					newMap[key] = append([]*Token(nil), value...)
+					newMap[key] = append([]*TreeNode(nil), value...)
 				}
 				node.prefList = newMap
 			}
