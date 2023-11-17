@@ -293,6 +293,7 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 	// ptr is handoff pointer
 	// curToken is where we aim to replicate whether it is original data or the handoff one
 	successfulReplication := 1
+	first := true
 	for {
 		if queue.Empty() {
 			break
@@ -302,8 +303,14 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 			Lock: sync.Mutex{},
 		}
 		cnt := 0
+		// Only for the first batch
+		// Example: prefList for token2 having pid = 2, [7,3,2].
+		// the first in the preflist not necessarily the phy node for itself given
+		// how the prefList is implemented rn. Since we want the original copy to be on
+		// the phy node thats why we want to for cnt == len(queue) - 1
 		for i := 0; i < len(queue.Data); i++ {
-			if cnt == len(queue.Data)-1 {
+			if cnt == len(queue.Data)-1 && first {
+				first = false
 				break
 			}
 			ptr = queue.Data[i]
