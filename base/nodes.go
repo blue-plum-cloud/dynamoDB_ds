@@ -339,6 +339,11 @@ func (n *Node) requestTreeNodeData(curToken *Token, hashKey string, c *config.Co
 
 // attempt to reconcile original with receiving
 func (n *Node) reconcile(original *Object, replica *Object) {
+	fmt.Println(replica)
+	if replica == nil {
+		return //don't reconcile if there is nothing at replica
+	}
+
 	//if 1, means the replica has a strictly greater clock, reconcile.
 	if compareVC(replica.context.v_clk, original.context.v_clk) == 1 {
 		original.data = replica.data

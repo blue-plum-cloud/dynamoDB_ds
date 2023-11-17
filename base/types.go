@@ -4,7 +4,6 @@ import (
 	"config"
 	"constants"
 	"fmt"
-	"sync"
 	"sync/atomic"
 )
 
@@ -13,7 +12,7 @@ type Client struct {
 	Close      chan struct{}
 	Client_ch  chan Message
 	AwaitUids  map[int](*atomic.Bool)
-	awaitMutex sync.Mutex
+	NewestRead string
 }
 
 type Message struct {
