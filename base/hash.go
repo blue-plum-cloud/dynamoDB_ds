@@ -10,8 +10,6 @@ import (
 	"math/rand"
 )
 
-// TODO: fix precalculate prefList
-
 // Function to compute the MD5 hash of a string
 // use hash as a string mainly for convenience
 func ComputeMD5(data string) string {
@@ -38,10 +36,11 @@ func populatePreferenceList(node *Node, startNode *TreeNode, windowMap map[int]s
 	var temp *TreeNode
 	var endNode *TreeNode = startNode
 
-	temp = node.tokenStruct.getPrev(endNode)
+	temp = endNode
+	first := true
 	for endNode != nil && len(pref) < c.N {
 		// Cannot find more unique physical node
-		if endNode == temp {
+		if endNode == temp && !first {
 			break
 		}
 		pid := endNode.Token.phy_id
@@ -50,6 +49,7 @@ func populatePreferenceList(node *Node, startNode *TreeNode, windowMap map[int]s
 			windowMap[pid] = struct{}{}
 		}
 		endNode = node.tokenStruct.getNext(endNode)
+		first = false
 	}
 
 	return pref, endNode
@@ -63,7 +63,6 @@ func logPreferenceList(tokenID int, prefList []*TreeNode, c *config.Config) {
 		for _, tokens := range prefList {
 			ids = append(ids, tokens.Token.phy_id)
 		}
-		fmt.Println(ids)
 	}
 }
 

@@ -92,9 +92,7 @@ type Node struct {
 	//state machine for Get()
 	numReads int
 
-	//state machine for Put()
-	numReps int
-
+	// Locking for concurrent rep
 	mutex sync.Mutex
 }
 
@@ -295,7 +293,3 @@ func (q *Queue) Empty() bool {
 	}
 	return false
 }
-
-// func(q *Queue) Clean() {
-// 	q.Data
-// }
