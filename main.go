@@ -6,12 +6,14 @@ import (
 	"config"
 	"constants"
 	"fmt"
+	"math/rand"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 var wg sync.WaitGroup
@@ -161,6 +163,7 @@ func generateClient(clients map[int]*base.Client, client_id int, close_ch chan s
 }
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
 	fmt.Println("Starting the application...")
 	reader := bufio.NewReader(os.Stdin)
 

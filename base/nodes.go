@@ -5,6 +5,7 @@ import (
 	"config"
 	"constants"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
@@ -222,7 +223,8 @@ func (n *Node) updateToken(token *Token, msg Message, c *config.Config) bool {
 /* Traverses token BST struc, assumed to be consistent across nodes 0 and other nodes */
 func FindNode(key string, phy_nodes []*Node, c *config.Config) *Node {
 	hashkey := ComputeMD5(key)
-	root := phy_nodes[0]
+	ctc := rand.Intn(len(phy_nodes))
+	root := phy_nodes[ctc]
 
 	// bst_node satisfies hashInRange(value, bst_node.Token.GetStartRange(), bst_node.Token.GetEndRange())
 	bst_node := root.tokenStruct.Search(hashkey, c)
