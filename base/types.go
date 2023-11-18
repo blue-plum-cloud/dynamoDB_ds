@@ -13,7 +13,7 @@ type Client struct {
 	Close      chan struct{}
 	Client_ch  chan Message
 	AwaitUids  map[int](*atomic.Bool)
-	awaitMutex sync.Mutex
+	NewestRead string
 }
 
 type Message struct {
@@ -89,11 +89,10 @@ type Node struct {
 	prefList     map[*Token][]*TreeNode
 	handOffQueue []*Token
 
-	//state machine for Get()
-	numReads int
-
 	// Locking for concurrent rep
-	mutex sync.Mutex
+	mutex       sync.Mutex
+	numReads    map[int]int
+	readTimeout chan int
 }
 
 func (n *Node) GetPrefList() map[*Token][]*TreeNode {
