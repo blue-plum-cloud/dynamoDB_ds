@@ -86,7 +86,8 @@ type Node struct {
 	prefList    map[*Token][]*Token
 
 	//state machine for Get()
-	numReads map[int]int
+	numReads    map[int]int
+	readTimeout chan int
 }
 
 func (n *Node) GetPrefList() map[*Token][]*Token {

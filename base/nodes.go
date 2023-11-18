@@ -75,10 +75,6 @@ func (n *Node) restoreHandoff(token *Token, msg Message, c *config.Config) {
 func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 	defer wg.Done()
 
-	//this timer needs to change to a timer for every different get request
-	getTimer := time.NewTimer(time.Duration(c.CLIENT_GET_TIMEOUT_MS) * time.Millisecond)
-	getTimer.Stop()
-
 	for {
 		select {
 		case <-n.close_ch:
@@ -145,12 +141,11 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 				fmt.Printf("%s\n", debugMsg.String())
 			}
 
-		case <-getTimer.C:
-			// if n.numReads[msg.JobId] < c.R {
-			// 	fmt.Println("Quorum not fulfilled for get(), get() is failed")
-			// }
-			// n.numReads = 0
-			getTimer.Reset(time.Duration(c.CLIENT_GET_TIMEOUT_MS))
+		case jobId := <-n.readTimeout:
+			if n.numReads[jobId] < c.R {
+				fmt.Println("Quorum not fulfilled for get(), get() failed")
+				n.numReads[jobId] = -c.NUM_NODES //set to some negative number so it will not send
+			}
 		}
 	}
 }
@@ -399,6 +394,14 @@ func (n *Node) Get(msg Message, c *config.Config) {
 		}
 	}
 
+	go n.startTimer(time.Duration(c.CLIENT_GET_TIMEOUT_MS)*time.Millisecond, msg.JobId)
+
+}
+
+func (n *Node) startTimer(duration time.Duration, jobId int) {
+	timer := time.NewTimer(duration)
+	<-timer.C
+	n.readTimeout <- jobId
 }
 
 func CreateNodes(close_ch chan struct{}, c *config.Config) []*Node {
@@ -425,6 +428,7 @@ func CreateNodes(close_ch chan struct{}, c *config.Config) []*Node {
 			awaitAck:    make(map[int](*atomic.Bool)),
 			prefList:    pl,
 			numReads:    make(map[int]int),
+			readTimeout: make(chan int),
 		}
 
 		nodeGroup = append(nodeGroup, &node)
