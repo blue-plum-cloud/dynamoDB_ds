@@ -100,6 +100,8 @@ func (client *Client) StartListening(c *config.Config) {
 					// TODO: validity check
 					fmt.Printf("COMPLETED Jobid=%d Command=%s: (%s, %s)\n",
 						msg.JobId, constants.GetConstantString(msg.Command), msg.Key, msg.Data)
+					client.NewestRead = msg.Data //for testing purposes
+					// fmt.Printf("set client newest read to %s\n", client.NewestRead)
 
 				case constants.CLIENT_ACK_WRITE:
 					// TODO: validity check
@@ -126,7 +128,6 @@ func (client *Client) StartTimeout(jobId int, command int, timeout_ms int) {
 		client.AwaitUids[jobId] = new(atomic.Bool)
 	}
 	client.AwaitUids[jobId].Store(true)
-	fmt.Println("stored jobId ", jobId)
 	reqTime := time.Now()
 
 	for {
