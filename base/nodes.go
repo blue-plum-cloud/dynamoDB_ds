@@ -75,10 +75,6 @@ func (n *Node) restoreHandoff(token *Token, msg Message, c *config.Config) {
 func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 	defer wg.Done()
 
-	//put timer
-	getTimer := time.NewTimer(time.Duration(c.CLIENT_GET_TIMEOUT_MS) * time.Millisecond)
-	getTimer.Stop()
-
 	for {
 		select {
 		case <-n.close_ch:
@@ -126,13 +122,13 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 
 			case constants.READ_DATA_ACK:
 				debugMsg.WriteString(fmt.Sprintf("numReads: %d", n.numReads))
-				if n.numReads == c.R {
+				if n.numReads[msg.JobId] == c.R {
 					n.reconcile(n.data[msg.Key], msg.ObjData)
 					msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_READ, Key: msg.Key, Data: n.data[msg.Key].data, SrcID: n.GetID()}
 				} else {
 					n.reconcile(n.data[msg.Key], msg.ObjData)
 				}
-				n.numReads++
+				n.numReads[msg.JobId]++
 
 			case constants.ACK_SET_DATA:
 				n.awaitAck[msg.SrcID].Store(false)
@@ -145,12 +141,11 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 				fmt.Printf("%s\n", debugMsg.String())
 			}
 
-		case <-getTimer.C:
-			if n.numReads < c.R {
-				fmt.Println("Quorum not fulfilled for get(), get() is failed")
+		case jobId := <-n.readTimeout:
+			if n.numReads[jobId] < c.R {
+				fmt.Println("Quorum not fulfilled for get(), get() failed")
+				n.numReads[jobId] = -c.NUM_NODES //set to some negative number so it will not send
 			}
-			n.numReads = 0
-			getTimer.Reset(time.Duration(c.CLIENT_GET_TIMEOUT_MS))
 		}
 	}
 }
@@ -339,6 +334,11 @@ func (n *Node) requestTreeNodeData(curToken *Token, hashKey string, c *config.Co
 
 // attempt to reconcile original with receiving
 func (n *Node) reconcile(original *Object, replica *Object) {
+	fmt.Println(replica)
+	if replica == nil {
+		return //don't reconcile if there is nothing at replica
+	}
+
 	//if 1, means the replica has a strictly greater clock, reconcile.
 	if compareVC(replica.context.v_clk, original.context.v_clk) == 1 {
 		original.data = replica.data
@@ -366,15 +366,16 @@ func (n *Node) Get(msg Message, c *config.Config) {
 	n.increment_vclk()
 	hashKey := ComputeMD5(msg.Key)
 
-	n.numReads = 1
+	if _, exists := n.data[hashKey]; !exists {
+		return
+	}
+
+	n.numReads[msg.JobId] = 1
+	//set up timer for the particular jobId here
 
 	curTreeNode := n.tokenStruct.Search(hashKey, c)
 	initToken := curTreeNode.Token
 	visitedNodes := make(map[int]struct{}) // To keep track of unique physical nodes
-
-	if _, exists := n.data[hashKey]; !exists {
-		return
-	}
 
 	reqCounter := 0
 
@@ -393,6 +394,14 @@ func (n *Node) Get(msg Message, c *config.Config) {
 		}
 	}
 
+	go n.startTimer(time.Duration(c.CLIENT_GET_TIMEOUT_MS)*time.Millisecond, msg.JobId)
+
+}
+
+func (n *Node) startTimer(duration time.Duration, jobId int) {
+	timer := time.NewTimer(duration)
+	<-timer.C
+	n.readTimeout <- jobId
 }
 
 func CreateNodes(close_ch chan struct{}, c *config.Config) []*Node {
@@ -418,6 +427,8 @@ func CreateNodes(close_ch chan struct{}, c *config.Config) []*Node {
 			close_ch:    close_ch,
 			awaitAck:    make(map[int](*atomic.Bool)),
 			prefList:    pl,
+			numReads:    make(map[int]int),
+			readTimeout: make(chan int),
 		}
 
 		nodeGroup = append(nodeGroup, &node)
