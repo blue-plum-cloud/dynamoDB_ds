@@ -105,7 +105,7 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 
 			case constants.SET_DATA:
 				n.data[msg.Key] = msg.ObjData
-				n.channels[msg.SrcID] <- Message{JobId: msg.JobId, Command: constants.ACK_SET_DATA, Key: msg.Key, SrcID: n.GetID()}
+				n.channels[msg.SrcID] <- Message{JobId: msg.JobId, Command: constants.ACK_SET_DATA, Key: msg.Key, SrcID: n.GetID(), ObjData: msg.ObjData}
 
 			case constants.BACK_DATA:
 				backupID := msg.HandoffToken.phy_id
@@ -272,26 +272,33 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 
 	if replicationCount <= 1 {
 		ackSent = true
-		msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_WRITE, Key: msg.Key, Data: msg.Data, SrcID: n.GetID()}
+		msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_WRITE, Key: msg.Key, Data: msg.Data, SrcID: n.GetID(), ObjData: msg.ObjData}
 	}
 
-	// Skip the first in preference list since its for original copy
+	// ptr is for the node we originally want to replicate to
+	// curToken is the node that we want to replicate to (does not necessarily need to be the original one)
 	var ptr *TreeNode
 	var curToken *TreeNode
+	var iterList []*TreeNode
+
+	// Wg for replication go routine
 	waitRep := new(sync.WaitGroup)
+
+	// To store list of nodes to replicate to
 	queue := Queue{
 		Data: []*TreeNode{},
 		Lock: sync.Mutex{},
 	}
-	var iterList []*TreeNode
+
+	// For first batch replication, queue will be the same as iterList
 	for i := 0; i < len(pref_list); i++ {
 		queue.Add(pref_list[i])
 		iterList = append(iterList, pref_list[i])
 	}
+
+	// In first batch replication, we do not do handOff
 	isHandOff := false
 
-	// ptr is handoff pointer
-	// curToken is where we aim to replicate whether it is original data or the handoff one
 	successfulReplication := 1
 	first := true
 	for {
@@ -315,7 +322,11 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 			}
 			ptr = queue.Data[i]
 			curToken = iterList[i]
-			if _, visited := visitedNodes[ptr.Token.phy_id]; !visited {
+			if isHandOff {
+				fmt.Printf("Attempting to replicate to node %d from failing node %d", curToken.Token.phy_id, ptr.Token.phy_id)
+			}
+
+			if _, visited := visitedNodes[curToken.Token.phy_id]; !visited {
 				cnt++
 				visitedNodes[ptr.Token.GetPID()] = struct{}{}
 				waitRep.Add(1)
@@ -330,9 +341,6 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 		waitRep.Wait()
 
 		// Update queue for next batch rep
-		for i := 0; i < len(queue.Data); i++ {
-			fmt.Println(queue.Data[i].Token.GetPID())
-		}
 
 		// temp is to store the node that fails to replicate
 		successfulReplication += cnt - len(temp.Data)
@@ -340,11 +348,20 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 		if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
 			fmt.Printf("Current replicated = %d\n", successfulReplication)
 			fmt.Printf("W = %d\n", W)
+			for i := 0; i < len(queue.Data); i++ {
+				fmt.Println(queue.Data[i].Token.GetPID())
+			}
 		}
 
+		// sloppy quorum after W rep sent ack to client
 		if successfulReplication >= W && !ackSent {
 			ackSent = true
 			msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_WRITE, Key: msg.Key, Data: msg.Data, SrcID: n.GetID()}
+		}
+
+		if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
+			fmt.Println("Temp data")
+			fmt.Println(temp.Data)
 		}
 
 		queue.Data = temp.Data
@@ -355,13 +372,16 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 		iterList = []*TreeNode{}
 		cnt = 0
 		for cnt < len(queue.Data) {
-			nxt := n.tokenStruct.getNext(ptr)
+			nxt := n.tokenStruct.getNext(curToken)
 			if _, visited := visitedNodes[nxt.Token.phy_id]; !visited {
 				iterList = append(iterList, nxt)
+				cnt++
 			}
 			ptr = nxt
-			cnt++
 		}
+
+		// is the flag only intended for first batch replication
+		first = false
 	}
 }
 
@@ -379,7 +399,9 @@ func (n *Node) replicate(value string, copy_vclk []int, mssg Message, hashKey st
 	// if replication fails or handoff fails, add to queue for the next batch of replication
 	queue.Lock.Lock()
 	if !updateSuccess {
+		fmt.Println("Update failed")
 		queue.Data = append(queue.Data, curToken)
+		fmt.Println(queue.Data)
 	}
 	queue.Lock.Unlock()
 }
