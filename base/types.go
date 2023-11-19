@@ -22,7 +22,6 @@ type Message struct {
 	Key     string
 	Data    string // for client
 	Wcount  int
-	ackSent bool
 
 	SrcID   int     // for inter-node
 	ObjData *Object // for inter-node
@@ -35,6 +34,10 @@ type Message struct {
 func (m *Message) ToString(targetID int) string {
 	return fmt.Sprintf("%d->%d %s \t\t JobId=%d, Key=%s, Data=%s, ObjData=(%s)",
 		m.SrcID, targetID, constants.GetConstantString(m.Command), m.JobId, m.Key, m.Data, m.ObjData.ToString())
+}
+
+func (m *Message) Copy() Message {
+	return Message{JobId: m.JobId, Command: m.Command, Key: m.Key, Data: m.Data, Wcount: m.Wcount, SrcID: m.SrcID, ObjData: m.ObjData.Copy(), Client_Ch: m.Client_Ch}
 }
 
 /* Versioning information */
@@ -63,8 +66,8 @@ func (o *Object) IsReplica() bool {
 	return o.isReplica
 }
 
-func (o *Object) Copy() Object {
-	return Object{context: o.context.Copy(), data: o.data, isReplica: o.isReplica}
+func (o *Object) Copy() *Object {
+	return &Object{context: o.context.Copy(), data: o.data, isReplica: o.isReplica}
 }
 
 func (o *Object) ToString() string {
