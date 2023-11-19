@@ -4,6 +4,7 @@ import (
 	"config"
 	"constants"
 	"fmt"
+	"sync"
 	"sync/atomic"
 )
 
@@ -88,12 +89,10 @@ type Node struct {
 	prefList     map[*Token][]*TreeNode
 	handOffQueue []*Token
 
-	//state machine for Get()
+	// Locking for concurrent rep
+	mutex       sync.Mutex
 	numReads    map[int]int
 	readTimeout chan int
-
-	// Locking for concurrent rep
-	mutex sync.Mutex
 }
 
 func (n *Node) GetPrefList() map[*Token][]*TreeNode {
@@ -211,12 +210,14 @@ func (bst *BST) getNext(node *TreeNode) *TreeNode {
 	// the given node would be in the left subtree.
 	var successor *TreeNode
 	ancestor := bst.Root
-	for ancestor != node {
+	for ancestor != nil {
 		if node.Token.range_start < ancestor.Token.range_start {
 			successor = ancestor
 			ancestor = ancestor.Left
-		} else {
+		} else if node.Token.range_start > ancestor.Token.range_start {
 			ancestor = ancestor.Right
+		} else {
+			break
 		}
 	}
 
@@ -224,6 +225,7 @@ func (bst *BST) getNext(node *TreeNode) *TreeNode {
 	if successor == nil {
 		return bst.leftMostNode(bst.Root)
 	}
+
 	return successor
 }
 
