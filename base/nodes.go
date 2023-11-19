@@ -46,21 +46,27 @@ func (n *Node) busyWait(duration int, c *config.Config) {
 
 /* Send message to update the node with object, Keeps retrying forever.*/
 func (n *Node) restoreHandoff(token *Token, msg Message, c *config.Config) {
+	n.mutex.Lock()
 	if _, exists := n.awaitAck[token.phy_id]; !exists {
 		n.awaitAck[token.phy_id] = new(atomic.Bool)
 	}
 	n.awaitAck[token.phy_id].Store(true)
 	n.channels[token.phy_id] <- msg
+	n.mutex.Unlock()
 
 	reqTime := time.Now()
 
 	for {
+		n.mutex.Lock()
 		if !(n.awaitAck[token.phy_id].Load()) {
 			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
 				fmt.Printf("restoreHandoff: %d->%d complete.\n", n.GetID(), token.phy_id)
 			}
 			delete(n.backup, token.phy_id)
+			n.mutex.Unlock()
 			return
+		} else {
+			n.mutex.Unlock()
 		}
 		if time.Since(reqTime) > time.Duration(config.SET_DATA_TIMEOUT_MS)*time.Millisecond {
 			if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
@@ -300,6 +306,7 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 		if queue.Empty() {
 			break
 		}
+
 		failedTreeNodes := Queue{
 			Data: []*TreeNode{},
 			Lock: sync.Mutex{},
@@ -349,13 +356,18 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 		// token6 preference list ends with token6 restoreToken which may ends in infinite loop
 		iterList = []*TreeNode{}
 		cnt := 0
+		loop := 0
 		for cnt < len(queue.Data) {
 			nxt := n.tokenStruct.getNext(curToken)
-			if _, visited := visitedNodes[nxt.Token.phy_id]; !visited {
+			if loop > c.NUM_TOKENS {
+				iterList = append(iterList, nxt)
+				cnt++
+			} else if _, visited := visitedNodes[nxt.Token.phy_id]; !visited {
 				iterList = append(iterList, nxt)
 				cnt++
 			}
-			restoreToken = nxt
+			curToken = nxt
+			loop++
 		}
 
 		// The first iteration is replication not handOff
