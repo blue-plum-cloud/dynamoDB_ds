@@ -4,6 +4,7 @@ import (
 	"config"
 	"constants"
 	"fmt"
+	"sync"
 	"sync/atomic"
 )
 
@@ -20,6 +21,7 @@ type Message struct {
 	Command int
 	Key     string
 	Data    string // for client
+	Wcount  int
 
 	SrcID   int     // for inter-node
 	ObjData *Object // for inter-node
@@ -32,6 +34,10 @@ type Message struct {
 func (m *Message) ToString(targetID int) string {
 	return fmt.Sprintf("%d->%d %s \t\t JobId=%d, Key=%s, Data=%s, ObjData=(%s)",
 		m.SrcID, targetID, constants.GetConstantString(m.Command), m.JobId, m.Key, m.Data, m.ObjData.ToString())
+}
+
+func (m *Message) Copy() Message {
+	return Message{JobId: m.JobId, Command: m.Command, Key: m.Key, Data: m.Data, Wcount: m.Wcount, SrcID: m.SrcID, ObjData: m.ObjData.Copy(), Client_Ch: m.Client_Ch}
 }
 
 /* Versioning information */
@@ -60,8 +66,8 @@ func (o *Object) IsReplica() bool {
 	return o.isReplica
 }
 
-func (o *Object) Copy() Object {
-	return Object{context: o.context.Copy(), data: o.data, isReplica: o.isReplica}
+func (o *Object) Copy() *Object {
+	return &Object{context: o.context.Copy(), data: o.data, isReplica: o.isReplica}
 }
 
 func (o *Object) ToString() string {
@@ -81,16 +87,18 @@ type Node struct {
 	backup   map[int](map[string]*Object) // backup of key-value data stores
 	close_ch chan struct{}                //to close go channels properly
 
-	awaitAck    map[int](*atomic.Bool) // flags to check on timeout routines
-	tokenStruct BST
-	prefList    map[*Token][]*Token
+	awaitAck     map[int](*atomic.Bool) // flags to check on timeout routines
+	tokenStruct  BST
+	prefList     map[*Token][]*TreeNode
+	handOffQueue []*Token
 
-	//state machine for Get()
+	// Locking for concurrent rep
+	mutex       sync.Mutex
 	numReads    map[int]int
 	readTimeout chan int
 }
 
-func (n *Node) GetPrefList() map[*Token][]*Token {
+func (n *Node) GetPrefList() map[*Token][]*TreeNode {
 	return n.prefList
 }
 
@@ -205,12 +213,14 @@ func (bst *BST) getNext(node *TreeNode) *TreeNode {
 	// the given node would be in the left subtree.
 	var successor *TreeNode
 	ancestor := bst.Root
-	for ancestor != node {
+	for ancestor != nil {
 		if node.Token.range_start < ancestor.Token.range_start {
 			successor = ancestor
 			ancestor = ancestor.Left
-		} else {
+		} else if node.Token.range_start > ancestor.Token.range_start {
 			ancestor = ancestor.Right
+		} else {
+			break
 		}
 	}
 
@@ -218,6 +228,7 @@ func (bst *BST) getNext(node *TreeNode) *TreeNode {
 	if successor == nil {
 		return bst.leftMostNode(bst.Root)
 	}
+
 	return successor
 }
 
@@ -270,4 +281,20 @@ func (bst *BST) PrintBST() {
 		fmt.Printf("%v\n", node.Token)
 		node = bst.getNext(node)
 	}
+}
+
+type Queue struct {
+	Data []*TreeNode
+	Lock sync.Mutex
+}
+
+func (q *Queue) Add(val *TreeNode) {
+	q.Data = append(q.Data, val)
+}
+
+func (q *Queue) Empty() bool {
+	if len(q.Data) == 0 {
+		return true
+	}
+	return false
 }

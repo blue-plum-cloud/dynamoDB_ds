@@ -46,21 +46,27 @@ func (n *Node) busyWait(duration int, c *config.Config) {
 
 /* Send message to update the node with object, Keeps retrying forever.*/
 func (n *Node) restoreHandoff(token *Token, msg Message, c *config.Config) {
+	n.mutex.Lock()
 	if _, exists := n.awaitAck[token.phy_id]; !exists {
 		n.awaitAck[token.phy_id] = new(atomic.Bool)
 	}
 	n.awaitAck[token.phy_id].Store(true)
 	n.channels[token.phy_id] <- msg
+	n.mutex.Unlock()
 
 	reqTime := time.Now()
 
 	for {
+		n.mutex.Lock()
 		if !(n.awaitAck[token.phy_id].Load()) {
 			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
 				fmt.Printf("restoreHandoff: %d->%d complete.\n", n.GetID(), token.phy_id)
 			}
 			delete(n.backup, token.phy_id)
+			n.mutex.Unlock()
 			return
+		} else {
+			n.mutex.Unlock()
 		}
 		if time.Since(reqTime) > time.Duration(config.SET_DATA_TIMEOUT_MS)*time.Millisecond {
 			if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
@@ -101,7 +107,7 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 
 			case constants.SET_DATA:
 				n.data[msg.Key] = msg.ObjData
-				n.channels[msg.SrcID] <- Message{JobId: msg.JobId, Command: constants.ACK_SET_DATA, Key: msg.Key, SrcID: n.GetID()}
+				n.channels[msg.SrcID] <- Message{JobId: msg.JobId, Command: constants.ACK_SET_DATA, Key: msg.Key, SrcID: n.GetID(), ObjData: msg.ObjData}
 
 			case constants.BACK_DATA:
 				backupID := msg.HandoffToken.phy_id
@@ -131,10 +137,14 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 				n.numReads[msg.JobId]++
 
 			case constants.ACK_SET_DATA:
+				n.mutex.Lock()
 				n.awaitAck[msg.SrcID].Store(false)
+				n.mutex.Unlock()
 
 			case constants.ACK_BACK_DATA:
+				n.mutex.Lock()
 				n.awaitAck[msg.SrcID].Store(false)
+				n.mutex.Unlock()
 			}
 
 			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
@@ -181,20 +191,25 @@ func getWCount(c *config.Config) int {
 
 /* Send message to update the node with object. Returns True if ACK receive within timeout, False otherwise */
 func (n *Node) updateToken(token *Token, msg Message, c *config.Config) bool {
+	n.mutex.Lock()
 	if _, exists := n.awaitAck[token.phy_id]; !exists {
 		n.awaitAck[token.phy_id] = new(atomic.Bool)
 	}
 	n.awaitAck[token.phy_id].Store(true)
 	n.channels[token.phy_id] <- msg
-
+	n.mutex.Unlock()
 	reqTime := time.Now()
 
 	for {
+		n.mutex.Lock()
 		if !(n.awaitAck[token.phy_id].Load()) {
 			if c.DEBUG_LEVEL >= constants.INFO {
 				fmt.Printf("updateToken: Replicated to token=%d, node=%d\n", token.GetID(), token.phy_id)
 			}
+			n.mutex.Unlock()
 			return true
+		} else {
+			n.mutex.Unlock()
 		}
 		if time.Since(reqTime) > time.Duration(c.SET_DATA_TIMEOUT_MS)*time.Millisecond {
 			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
@@ -218,9 +233,13 @@ func FindNode(key string, phy_nodes []*Node, c *config.Config) *Node {
 	return phy_nodes[bst_node.Token.phy_id]
 }
 
-// internal function
-// Can refactor in the future to use dict instead so we know what are the key and value
-// rather than accessing it by index which we not sure which correspond to which
+/*
+1. Updates coordinator value
+2. Concurrent replicate to N
+3. Store tokens for timeout replica
+4. Concurrent handoff to K
+5. Repeat 3 to 4 till done or run out
+*/
 func (n *Node) Put(msg Message, value string, c *config.Config) {
 	replicationCount := GetReplicationCount(c)
 
@@ -231,80 +250,143 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 	n.increment_vclk()
 	copy_vclk := n.copy_vclk()
 
-	// Replication process
-	curTreeNode := n.tokenStruct.Search(hashKey, c)
-	initToken := curTreeNode.Token
-	visitedNodes := make(map[int]struct{}) // To keep track of unique physical nodes. Use map as set. Use struct{} to occupy 0 space
-	handoffQueue := make([]*Token, 0)
-
-	if c.DEBUG_LEVEL >= constants.INFO {
-		fmt.Printf("Put: Coordinator node = %d, token = %d, responsible for hashkey = %032X, replicationCount %d\n", n.GetID(), curTreeNode.Token.id, hashKey, replicationCount)
-	}
+	initToken := n.tokenStruct.Search(hashKey, c).Token
+	visitedNodes := make(map[int]struct{}) // To keep track of unique ph\ysical nodes. Use map as set. Use struct{} to occupy 0 space
 
 	// Coordinator copy
 	newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
 	n.data[hashKey] = &newObj // do not handle coordinator die
 	visitedNodes[initToken.phy_id] = struct{}{}
 	if c.DEBUG_LEVEL >= constants.INFO {
-		fmt.Printf("Put: Stored to (corodinator) token %d, node=%d\n", initToken.GetID(), initToken.phy_id)
+		fmt.Printf("Put: Coordinator node = %d, token = %d, responsible for hashkey = %032X, replicationCount %d. Stored to self\n", n.GetID(), initToken.id, hashKey, replicationCount)
 	}
-
 	if replicationCount <= 1 {
 		ackSent = true
-		msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_WRITE, Key: msg.Key, Data: msg.Data, SrcID: n.GetID()}
+		msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_WRITE, Key: msg.Key, Data: msg.Data, SrcID: n.GetID(), ObjData: msg.ObjData}
 	}
 
-	successfulReplication := 1
-	for successfulReplication < replicationCount {
-		nextTreeNode := n.tokenStruct.getNext(curTreeNode)
-		curTreeNode = nextTreeNode
-		curToken := curTreeNode.Token
+	// Retrieve preference list and start replication
+	pref_list, ok := n.prefList[initToken]
+	if !ok {
+		pref_list = nil
+		if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
+			fmt.Println("Token is not found on the preference list")
+		}
+		return
+	}
 
-		// After one loop stop.
-		if curToken.GetID() == initToken.GetID() {
-			fmt.Printf("Put: ERROR! Only replicated %d/%d times!\n", successfulReplication, c.N)
+	// restoreToken is for the node we originally want to replicate to
+	// curToken is the node that we want to replicate to (does not necessarily need to be the original one)
+	var restoreToken *TreeNode
+	var curToken *TreeNode
+	var iterList []*TreeNode
+
+	// Wg for replication go routine
+	waitRep := new(sync.WaitGroup)
+
+	// To store list of nodes to replicate to
+	queue := Queue{
+		Data: []*TreeNode{},
+		Lock: sync.Mutex{},
+	}
+
+	// For first batch replication, queue will be the same as iterList
+	for i := 1; i < len(pref_list); i++ { // skip coordinator
+		queue.Add(pref_list[i])
+		iterList = append(iterList, pref_list[i])
+	}
+
+	// message template
+	repObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
+	repMsg := &Message{JobId: msg.JobId, Command: constants.SET_DATA, Key: hashKey, ObjData: &repObj, SrcID: n.GetID()}
+
+	// In first batch replication, we do not do handOff
+	isHandOff := false
+	for {
+		if queue.Empty() {
 			break
 		}
 
-		// Notes for implementation
-
-		// checking the visited concurrently in the batch of N-1 rep
-		// need to change the structure a bit since, we are not traversing one by one anymore
-		// need to implement queue sistem for the token that failed to replicate because
-		// they have non-distinct phy node with prev one, with this need to
-		// implement some way of locking as well currently we are using syc/atomic for locking
-		// disadvantages of this is currently we are using timeout on ack so if the channel is
-		// blocked or busy for sometime, the implementation might get screwed
-
-		if _, visited := visitedNodes[curToken.phy_id]; !visited {
-			isHandoff := len(visitedNodes) > replicationCount-1 // counts coordinator node
-			newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
-			msg := &Message{JobId: msg.JobId, Command: constants.SET_DATA, Key: hashKey, ObjData: &newObj, SrcID: n.GetID()}
-			if isHandoff {
-				msg.Command = constants.BACK_DATA
-				msg.HandoffToken = handoffQueue[0]
-			}
-			updateSuccess := n.updateToken(curToken, *msg, c)
-
-			// fail SET_DATA: add to list of tokens to restore to
-			if !updateSuccess && !isHandoff {
-				handoffQueue = append(handoffQueue, curToken)
-			}
-			if updateSuccess {
-				// success BACK_DATA: remove from list of tokens to restore to
-				if isHandoff {
-					handoffQueue = handoffQueue[1:]
-				}
-				successfulReplication += 1
-			}
-			visitedNodes[curToken.phy_id] = struct{}{}
+		failedTreeNodes := Queue{
+			Data: []*TreeNode{},
+			Lock: sync.Mutex{},
 		}
 
-		if successfulReplication == W && !ackSent {
+		for i := 0; i < len(queue.Data); i++ {
+			restoreToken = queue.Data[i]
+			curToken = iterList[i]
+
+			if _, visited := visitedNodes[curToken.Token.phy_id]; !visited {
+				visitedNodes[restoreToken.Token.phy_id] = struct{}{}
+				waitRep.Add(1)
+
+				if isHandOff {
+					handMsg := repMsg.Copy()
+					handMsg.Command = constants.BACK_DATA
+					handMsg.HandoffToken = restoreToken.Token
+					fmt.Printf("Attempting to replicate to node %d from failing node %d\n", curToken.Token.phy_id, restoreToken.Token.phy_id)
+					go n.replicate(handMsg, curToken, c, &failedTreeNodes, waitRep)
+				} else {
+					go n.replicate(repMsg.Copy(), curToken, c, &failedTreeNodes, waitRep)
+				}
+			}
+		}
+
+		waitRep.Wait()
+
+		// Update queue for next batch rep
+		// failedTreeNodes is to store the node that fails to replicate
+		if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
+			fmt.Printf("Current replicated = %d\n", replicationCount-len(failedTreeNodes.Data))
+			for _, failedTreeNode := range failedTreeNodes.Data {
+				fmt.Printf("failed node=%d, token=%d\n", failedTreeNode.Token.phy_id, failedTreeNode.Token.phy_id)
+			}
+		}
+
+		// sloppy quorum after W rep sent ack to client
+		if replicationCount-len(failedTreeNodes.Data) >= W && !ackSent {
 			ackSent = true
-			msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_WRITE, Key: msg.Key, Data: msg.Data, SrcID: n.GetID()}
+			msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_WRITE, Key: msg.Key, Data: msg.Data, SrcID: n.id}
+		}
+
+		queue.Data = failedTreeNodes.Data
+
+		// For next batch replication cannot use preference list
+		// Cause of how preference list is calculated there is a chance that
+		// token6 preference list ends with token6 restoreToken which may ends in infinite loop
+		iterList = []*TreeNode{}
+		cnt := 0
+		loop := 0
+		for cnt < len(queue.Data) {
+			nxt := n.tokenStruct.getNext(curToken)
+			if loop > c.NUM_TOKENS {
+				iterList = append(iterList, nxt)
+				cnt++
+			} else if _, visited := visitedNodes[nxt.Token.phy_id]; !visited {
+				iterList = append(iterList, nxt)
+				cnt++
+			}
+			curToken = nxt
+			loop++
+		}
+
+		// The first iteration is replication not handOff
+		if !isHandOff {
+			isHandOff = true
 		}
 	}
+}
+
+func (n *Node) replicate(msg Message, curToken *TreeNode, c *config.Config, failedTreeNodes *Queue, wg *sync.WaitGroup) {
+	defer wg.Done()
+	updateSuccess := n.updateToken(curToken.Token, msg, c)
+
+	// if replication fails or handoff fails, add to queue for the next batch of replication
+	failedTreeNodes.Lock.Lock()
+	if !updateSuccess {
+		failedTreeNodes.Data = append(failedTreeNodes.Data, curToken)
+	}
+	failedTreeNodes.Lock.Unlock()
 }
 
 // helper func for GET
@@ -410,9 +492,9 @@ func CreateNodes(close_ch chan struct{}, c *config.Config) []*Node {
 	numNodes := c.NUM_NODES
 	var nodeGroup []*Node
 	for j := 0; j < numNodes; j++ {
-		pl := make(map[*Token][]*Token, c.NUM_TOKENS)
+		pl := make(map[*Token][]*TreeNode, c.NUM_TOKENS)
 		for i := range pl {
-			pl[i] = make([]*Token, c.N)
+			pl[i] = make([]*TreeNode, c.N)
 		}
 
 		//make j nodes

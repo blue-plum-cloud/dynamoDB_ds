@@ -31,38 +31,45 @@ func hashInRange(hashStr string, lowerBound string, upperBound string) bool {
 	return hashInt.Cmp(lower) >= 0 && hashInt.Cmp(upper) <= 0
 }
 
-func populatePreferenceList(node *Node, startNode *TreeNode, windowMap map[int]struct{}, pref []*Token, c *config.Config) ([]*Token, *TreeNode) {
+func populatePreferenceList(node *Node, startNode *TreeNode, N int) []*TreeNode {
+	var nodes []*TreeNode
+	visited := make(map[int]bool)
 
-	var temp *TreeNode
-	var endNode *TreeNode = startNode
+	currentNode := startNode
+	for i := 0; i < N && currentNode != nil; {
+		pid := currentNode.Token.GetPID()
+		if _, found := visited[pid]; !found {
+			nodes = append(nodes, currentNode)
+			visited[pid] = true
+			i++
+		}
 
-	temp = node.tokenStruct.getPrev(endNode)
-	for endNode != nil && len(pref) < c.N {
-		// Cannot find more unique physical node
-		if endNode == temp {
+		currentNode = node.tokenStruct.getNext(currentNode)
+		if currentNode == startNode {
 			break
 		}
-		pid := endNode.Token.phy_id
-		if _, exists := windowMap[pid]; !exists {
-			pref = append(pref, endNode.Token)
-			windowMap[pid] = struct{}{}
-		}
-		endNode = node.tokenStruct.getNext(endNode)
 	}
-
-	return pref, endNode
+	return nodes
 }
 
-func logPreferenceList(tokenID int, prefList []*Token, c *config.Config) {
+func logPreferenceList(tokenID int, prefList []*TreeNode, c *config.Config) {
 	if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
 		fmt.Printf("Preference list for token %d: \n", tokenID)
 		fmt.Println(prefList)
 		var ids []int
 		for _, tokens := range prefList {
-			ids = append(ids, tokens.phy_id)
+			ids = append(ids, tokens.Token.phy_id)
 		}
-		fmt.Println(ids)
 	}
+}
+
+func findCurrentToken(node *Node, cnt int) *TreeNode {
+	cur := node.tokenStruct.Root
+
+	for i := 0; i < cnt; i++ {
+		cur = node.tokenStruct.getNext(cur)
+	}
+	return cur
 }
 
 func InitializeTokens(phy_nodes []*Node, c *config.Config) {
@@ -147,55 +154,27 @@ func InitializeTokens(phy_nodes []*Node, c *config.Config) {
 
 	// Make preference list copy for each node
 	if len(phy_nodes) > 0 {
-		rangeMap := make(map[*Token][]*Token)
+		rangeMap := make(map[*Token][]*TreeNode)
 		node := phy_nodes[0]
-		startNode := node.tokenStruct.Root
-		if startNode != nil {
-			var pref []*Token
-			windowMap := make(map[int]struct{})
-			pref, endNode := populatePreferenceList(node, node.tokenStruct.Root, windowMap, pref, c)
-			rangeMap[node.tokenStruct.Root.Token] = make([]*Token, len(pref))
-			copy(rangeMap[node.tokenStruct.Root.Token], pref)
-			logPreferenceList(startNode.Token.GetID(), pref, c)
+		cnt := 0
+		for cnt < c.NUM_TOKENS {
+			currentNode := findCurrentToken(node, cnt)
+			var pref []*TreeNode
+			pref = populatePreferenceList(node, currentNode, c.N)
 
-			cnt := 1
-			var st *Token
-
-			for cnt < c.NUM_TOKENS {
-				startNode = node.tokenStruct.getNext(startNode)
-
-				if len(pref) > 0 {
-					st = pref[0]
-					pref = pref[1:]
-
-					delete(windowMap, st.phy_id)
-				}
-
-				pref, endNode = populatePreferenceList(node, endNode, windowMap, pref, c)
-
-				rangeMap[startNode.Token] = make([]*Token, len(pref))
-				copy(rangeMap[startNode.Token], pref)
-				logPreferenceList(startNode.Token.GetID(), pref, c)
-				cnt++
-			}
+			// Update the range map for the current token
+			rangeMap[currentNode.Token] = make([]*TreeNode, len(pref))
+			copy(rangeMap[currentNode.Token], pref)
 
 			if c.DEBUG_LEVEL >= constants.VERY_VERBOSE {
-				fmt.Println("Overall preference list: ")
-				for key, tokens := range rangeMap {
-					var ids []int
-					for _, token := range tokens {
-						ids = append(ids, token.phy_id)
-					}
-					fmt.Printf("Token %p: %v\n", key, ids)
-				}
+				logPreferenceList(currentNode.Token.GetID(), pref, c)
 			}
-
-			for _, node := range phy_nodes {
-				newMap := make(map[*Token][]*Token)
-				for key, value := range rangeMap {
-					newMap[key] = append([]*Token(nil), value...)
-				}
-				node.prefList = newMap
+			cnt++
+		}
+		for _, node := range phy_nodes {
+			node.prefList = make(map[*Token][]*TreeNode)
+			for key, value := range rangeMap {
+				node.prefList[key] = append([]*TreeNode(nil), value...)
 			}
 		}
 	}

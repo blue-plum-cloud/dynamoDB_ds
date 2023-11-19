@@ -120,9 +120,9 @@ func printStatus(phy_nodes []*base.Node) {
 		for key, tokens := range node.GetPrefList() {
 			var ids []int
 			for _, token := range tokens {
-				ids = append(ids, token.GetPID())
+				ids = append(ids, token.Token.GetPID())
 			}
-			fmt.Printf("Token %p: %v\n", key, ids)
+			fmt.Printf("Token id = %d, pid = %d, %v, len() = %d\n", key.GetID(), key.GetPID(), ids, len(ids))
 
 		}
 		fmt.Println("===============")
