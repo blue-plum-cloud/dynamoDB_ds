@@ -146,6 +146,9 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 				n.mutex.Lock()
 				n.awaitAck[msg.SrcID].Store(false)
 				n.mutex.Unlock()
+
+			case constants.ALIVE_ACK:
+				msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_ALIVE, Key: msg.Key, Data: msg.Data, SrcID: n.id}
 			}
 
 			if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
@@ -222,7 +225,7 @@ func (n *Node) updateToken(token *Token, msg Message, c *config.Config) bool {
 }
 
 /* Traverses token BST struc, assumed to be consistent across nodes 0 and other nodes */
-func FindNode(key string, phy_nodes []*Node, c *config.Config) *Node {
+func FindNode(key string, phy_nodes []*Node, c *config.Config) (*Token, *Node) {
 	hashkey := ComputeMD5(key)
 	ctc := rand.Intn(len(phy_nodes))
 	root := phy_nodes[ctc]
@@ -232,7 +235,18 @@ func FindNode(key string, phy_nodes []*Node, c *config.Config) *Node {
 	if bst_node == nil {
 		panic("node not found due to key being out of range of all tokens")
 	}
-	return phy_nodes[bst_node.Token.phy_id]
+	return bst_node.Token, phy_nodes[bst_node.Token.phy_id]
+}
+
+func FindPrefList(token *Token, phy_nodes []*Node, cnt int) *Node {
+	ctc := rand.Intn(len(phy_nodes))
+	root := phy_nodes[ctc]
+	pref := root.prefList[token]
+	// Assuming at least one node in the preference list alive
+	if cnt > len(pref) {
+		return nil
+	}
+	return phy_nodes[pref[cnt].Token.phy_id]
 }
 
 /*
@@ -256,9 +270,9 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 	visitedNodes := make(map[int]struct{}) // To keep track of unique ph\ysical nodes. Use map as set. Use struct{} to occupy 0 space
 
 	// Coordinator copy
-	newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
-	n.data[hashKey] = &newObj // do not handle coordinator die
-	visitedNodes[initToken.phy_id] = struct{}{}
+	// newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
+	// n.data[hashKey] = &newObj // do not handle coordinator die
+	// visitedNodes[initToken.phy_id] = struct{}{}
 	if c.DEBUG_LEVEL >= constants.INFO {
 		fmt.Printf("Put: Coordinator node = %d, token = %d, responsible for hashkey = %032X, replicationCount %d. Stored to self\n", n.GetID(), initToken.id, hashKey, replicationCount)
 	}
@@ -282,6 +296,7 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 	var restoreToken *TreeNode
 	var curToken *TreeNode
 	var iterList []*TreeNode
+	var repCoor bool
 
 	// Wg for replication go routine
 	waitRep := new(sync.WaitGroup)
@@ -289,18 +304,24 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 	// To store list of nodes to replicate to
 	queue := Queue{
 		Data: []*TreeNode{},
+		Rep:  []bool{},
 		Lock: sync.Mutex{},
 	}
 
 	// For first batch replication, queue will be the same as iterList
+	queue.Add(pref_list[0], true)
+	iterList = append(iterList, pref_list[0])
 	for i := 1; i < len(pref_list); i++ { // skip coordinator
-		queue.Add(pref_list[i])
+		queue.Add(pref_list[i], false)
 		iterList = append(iterList, pref_list[i])
 	}
 
 	// message template
 	repObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
 	repMsg := &Message{JobId: msg.JobId, Command: constants.SET_DATA, Key: hashKey, ObjData: &repObj, SrcID: n.GetID()}
+
+	repObjCoor := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
+	repMsgCoor := &Message{JobId: msg.JobId, Command: constants.SET_DATA, Key: hashKey, ObjData: &repObjCoor, SrcID: n.GetID()}
 
 	// In first batch replication, we do not do handOff
 	isHandOff := false
@@ -311,25 +332,30 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 
 		failedTreeNodes := Queue{
 			Data: []*TreeNode{},
+			Rep:  []bool{},
 			Lock: sync.Mutex{},
 		}
 
 		for i := 0; i < len(queue.Data); i++ {
 			restoreToken = queue.Data[i]
+			repCoor = queue.Rep[i]
 			curToken = iterList[i]
 
 			if _, visited := visitedNodes[curToken.Token.phy_id]; !visited {
 				visitedNodes[restoreToken.Token.phy_id] = struct{}{}
 				waitRep.Add(1)
-
+				handMsg := repMsg.Copy()
+				if repCoor {
+					handMsg = repMsgCoor.Copy()
+				}
 				if isHandOff {
-					handMsg := repMsg.Copy()
 					handMsg.Command = constants.BACK_DATA
 					handMsg.HandoffToken = restoreToken.Token
+
 					fmt.Printf("Attempting to replicate to node %d from failing node %d\n", curToken.Token.phy_id, restoreToken.Token.phy_id)
 					go n.replicate(handMsg, curToken, c, &failedTreeNodes, waitRep)
 				} else {
-					go n.replicate(repMsg.Copy(), curToken, c, &failedTreeNodes, waitRep)
+					go n.replicate(handMsg, curToken, c, &failedTreeNodes, waitRep)
 				}
 			}
 		}
@@ -387,6 +413,7 @@ func (n *Node) replicate(msg Message, curToken *TreeNode, c *config.Config, fail
 	failedTreeNodes.Lock.Lock()
 	if !updateSuccess {
 		failedTreeNodes.Data = append(failedTreeNodes.Data, curToken)
+		failedTreeNodes.Rep = append(failedTreeNodes.Rep, true)
 	}
 	failedTreeNodes.Lock.Unlock()
 }

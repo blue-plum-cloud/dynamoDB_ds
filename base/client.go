@@ -108,6 +108,9 @@ func (client *Client) StartListening(c *config.Config) {
 					fmt.Printf("COMPLETED Jobid=%d Command=%s: (%s, %s)\n",
 						msg.JobId, constants.GetConstantString(msg.Command), msg.Key, msg.Data)
 
+				case constants.CLIENT_ACK_ALIVE:
+					fmt.Printf("Node is alive!")
+
 				default:
 					panic("Unexpected ACK received in client_ch.")
 				}
@@ -123,7 +126,7 @@ func (client *Client) StartListening(c *config.Config) {
 // Separate routine from client CLI
 // Constantly consume client_ch even after timeout
 // !!!! Loops infinitely if server drops request and does not ACK it
-func (client *Client) StartTimeout(jobId int, command int, timeout_ms int) {
+func (client *Client) StartTimeout(jobId int, command int, timeout_ms int) bool {
 	if _, exists := client.AwaitUids[jobId]; !exists {
 		client.AwaitUids[jobId] = new(atomic.Bool)
 	}
@@ -133,16 +136,16 @@ func (client *Client) StartTimeout(jobId int, command int, timeout_ms int) {
 	for {
 		select {
 		case <-client.Close:
-			return
+			return true
 		default:
 			if !(client.AwaitUids[jobId].Load()) {
 				delete(client.AwaitUids, jobId)
-				return
+				return true
 			}
 			if time.Since(reqTime) > time.Duration(timeout_ms)*time.Millisecond {
 				fmt.Printf("TIMEOUT REACHED: Jobid=%d Command=%s\n", jobId, constants.GetConstantString(command))
 				client.AwaitUids[jobId].Store(false)
-				return
+				return false
 			}
 		}
 	}

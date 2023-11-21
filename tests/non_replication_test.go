@@ -47,7 +47,7 @@ func TestNoUpdateGetPut(t *testing.T) {
 				hashedKey := base.ComputeMD5(key)
 				fmt.Printf("Key: %s ; Value: %s ; Hashed Key: %s", key, value, hashedKey)
 
-				node := base.FindNode(key, phy_nodes, &c)
+				_, node := base.FindNode(key, phy_nodes, &c)
 				channel := (*node).GetChannel()
 				channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, Client_Ch: client_ch}
 
@@ -116,7 +116,7 @@ func TestMultipleGetPut(t *testing.T) {
 					hashedKey := base.ComputeMD5(key)
 					fmt.Printf("Key: %s ; Value: %s ; Hashed Key: %s", key, value, hashedKey)
 
-					node := base.FindNode(key, phy_nodes, &c)
+					_, node := base.FindNode(key, phy_nodes, &c)
 					channel := (*node).GetChannel()
 					channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, Client_Ch: client_ch}
 
