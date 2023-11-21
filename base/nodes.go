@@ -270,7 +270,7 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 	visitedNodes := make(map[int]struct{}) // To keep track of unique ph\ysical nodes. Use map as set. Use struct{} to occupy 0 space
 
 	// Coordinator copy
-	// If I uncomment these 3 lines, got race condition on non_replication_test O.O
+	// If I commented these 3 lines, got race condition on non_replication_test O.O
 	// newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
 	// n.data[hashKey] = &newObj // do not handle coordinator die
 	// visitedNodes[initToken.phy_id] = struct{}{}
