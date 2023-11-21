@@ -13,7 +13,7 @@ type Client struct {
 	Close      chan struct{}
 	Client_ch  chan Message
 	AwaitUids  map[int](*atomic.Bool)
-	awaitMutex sync.Mutex
+	NewestRead string
 }
 
 type Message struct {
@@ -22,7 +22,6 @@ type Message struct {
 	Key     string
 	Data    string // for client
 	Wcount  int
-	ackSent bool
 
 	SrcID   int     // for inter-node
 	ObjData *Object // for inter-node
@@ -35,6 +34,10 @@ type Message struct {
 func (m *Message) ToString(targetID int) string {
 	return fmt.Sprintf("%d->%d %s \t\t JobId=%d, Key=%s, Data=%s, ObjData=(%s)",
 		m.SrcID, targetID, constants.GetConstantString(m.Command), m.JobId, m.Key, m.Data, m.ObjData.ToString())
+}
+
+func (m *Message) Copy() Message {
+	return Message{JobId: m.JobId, Command: m.Command, Key: m.Key, Data: m.Data, Wcount: m.Wcount, SrcID: m.SrcID, ObjData: m.ObjData.Copy(), Client_Ch: m.Client_Ch}
 }
 
 /* Versioning information */
@@ -63,8 +66,8 @@ func (o *Object) IsReplica() bool {
 	return o.isReplica
 }
 
-func (o *Object) Copy() Object {
-	return Object{context: o.context.Copy(), data: o.data, isReplica: o.isReplica}
+func (o *Object) Copy() *Object {
+	return &Object{context: o.context.Copy(), data: o.data, isReplica: o.isReplica}
 }
 
 func (o *Object) ToString() string {
@@ -89,11 +92,10 @@ type Node struct {
 	prefList     map[*Token][]*TreeNode
 	handOffQueue []*Token
 
-	//state machine for Get()
-	numReads int
-
 	// Locking for concurrent rep
-	mutex sync.Mutex
+	mutex       sync.Mutex
+	numReads    map[int]int
+	readTimeout chan int
 }
 
 func (n *Node) GetPrefList() map[*Token][]*TreeNode {
@@ -211,12 +213,14 @@ func (bst *BST) getNext(node *TreeNode) *TreeNode {
 	// the given node would be in the left subtree.
 	var successor *TreeNode
 	ancestor := bst.Root
-	for ancestor != node {
+	for ancestor != nil {
 		if node.Token.range_start < ancestor.Token.range_start {
 			successor = ancestor
 			ancestor = ancestor.Left
-		} else {
+		} else if node.Token.range_start > ancestor.Token.range_start {
 			ancestor = ancestor.Right
+		} else {
+			break
 		}
 	}
 
@@ -224,6 +228,7 @@ func (bst *BST) getNext(node *TreeNode) *TreeNode {
 	if successor == nil {
 		return bst.leftMostNode(bst.Root)
 	}
+
 	return successor
 }
 

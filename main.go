@@ -262,7 +262,6 @@ func main() {
 					Command:   constants.CLIENT_REQ_READ,
 					SrcID:     client_id,
 					Client_Ch: client.Client_ch}
-				fmt.Println("sending get to node ", node.GetID())
 				client.StartTimeout(jobId, constants.CLIENT_REQ_READ, c.CLIENT_GET_TIMEOUT_MS)
 
 			} else if matched, _ := regexp.MatchString(killRegex, input); matched {
