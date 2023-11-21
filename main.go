@@ -227,52 +227,43 @@ func main() {
 				}
 
 				client = clients[client_id]
-				_, node := base.FindNode(key, phy_nodes, &c)
+				token, node := base.FindNode(key, phy_nodes, &c)
 				channel := (*node).GetChannel()
 				newJob := jobId
 
-				channel <- base.Message{
-					JobId:     newJob,
-					Key:       key,
-					Command:   constants.CLIENT_REQ_WRITE,
-					Data:      value,
-					SrcID:     client_id,
-					Client_Ch: client.Client_ch}
-				client.StartTimeout(newJob, constants.CLIENT_REQ_WRITE, c.CLIENT_GET_TIMEOUT_MS)
-
-				// succ := false
-				// cnt := 1
-				// for !succ {
-				// 	channel <- base.Message{
-				// 		JobId:     newJob,
-				// 		Key:       key,
-				// 		Command:   constants.ALIVE_ACK,
-				// 		Data:      value,
-				// 		SrcID:     client_id,
-				// 		Client_Ch: client.Client_ch}
-				// 	succ = client.StartTimeout(newJob, constants.ALIVE_ACK, c.CLIENT_GET_TIMEOUT_MS)
-				// 	if succ {
-				// 		channel <- base.Message{
-				// 			JobId:     newJob,
-				// 			Key:       key,
-				// 			Command:   constants.CLIENT_REQ_WRITE,
-				// 			Data:      value,
-				// 			SrcID:     client_id,
-				// 			Client_Ch: client.Client_ch}
-				// 		client.StartTimeout(newJob, constants.CLIENT_REQ_WRITE, c.CLIENT_GET_TIMEOUT_MS)
-				// 	} else {
-				// 		new_node := base.FindPrefList(token, phy_nodes, cnt)
-				// 		if new_node == nil {
-				// 			fmt.Println("System currently busy, try again later :D")
-				// 			return
-				// 		}
-				// 		channel = (*new_node).GetChannel()
-				// 		fmt.Println("Looking for node handler...")
-				// 		cnt++
-				// 	}
-				// 	jobId++
-				// 	newJob = jobId
-				// }
+				succ := false
+				cnt := 1
+				for !succ {
+					channel <- base.Message{
+						JobId:     newJob,
+						Key:       key,
+						Command:   constants.ALIVE_ACK,
+						Data:      value,
+						SrcID:     client_id,
+						Client_Ch: client.Client_ch}
+					succ = client.StartTimeout(newJob, constants.ALIVE_ACK, c.CLIENT_GET_TIMEOUT_MS)
+					if succ {
+						channel <- base.Message{
+							JobId:     newJob,
+							Key:       key,
+							Command:   constants.CLIENT_REQ_WRITE,
+							Data:      value,
+							SrcID:     client_id,
+							Client_Ch: client.Client_ch}
+						client.StartTimeout(newJob, constants.CLIENT_REQ_WRITE, c.CLIENT_GET_TIMEOUT_MS)
+					} else {
+						new_node := base.FindPrefList(token, phy_nodes, cnt)
+						if new_node == nil {
+							fmt.Println("System currently busy, try again later :D")
+							return
+						}
+						channel = (*new_node).GetChannel()
+						fmt.Println("Looking for node handler...")
+						cnt++
+					}
+					jobId++
+					newJob = jobId
+				}
 
 			} else if matched, _ := regexp.MatchString(getRegex, input); matched {
 				//get
@@ -341,51 +332,43 @@ func main() {
 						}
 
 						client = clients[client_id]
-						_, node := base.FindNode(key, phy_nodes, &c)
+						token, node := base.FindNode(key, phy_nodes, &c)
 						channel := (*node).GetChannel()
 						newJob := jobId
 
-						channel <- base.Message{
-							JobId:     newJob,
-							Key:       key,
-							Command:   constants.CLIENT_REQ_WRITE,
-							Data:      value,
-							SrcID:     client_id,
-							Client_Ch: client.Client_ch}
-						client.StartTimeout(newJob, constants.CLIENT_REQ_WRITE, c.CLIENT_GET_TIMEOUT_MS)
-						// succ := false
-						// cnt := 1
-						// for !succ {
-						// 	channel <- base.Message{
-						// 		JobId:     newJob,
-						// 		Key:       key,
-						// 		Command:   constants.ALIVE_ACK,
-						// 		Data:      value,
-						// 		SrcID:     client_id,
-						// 		Client_Ch: client.Client_ch}
-						// 	succ = client.StartTimeout(newJob, constants.ALIVE_ACK, c.CLIENT_GET_TIMEOUT_MS)
-						// 	if succ {
-						// 		channel <- base.Message{
-						// 			JobId:     newJob,
-						// 			Key:       key,
-						// 			Command:   constants.CLIENT_REQ_WRITE,
-						// 			Data:      value,
-						// 			SrcID:     client_id,
-						// 			Client_Ch: client.Client_ch}
-						// 		client.StartTimeout(newJob, constants.CLIENT_REQ_WRITE, c.CLIENT_GET_TIMEOUT_MS)
-						// 	} else {
-						// 		new_node := base.FindPrefList(token, phy_nodes, cnt)
-						// 		if new_node == nil {
-						// 			fmt.Println("System currently busy, try again later :D")
-						// 			return
-						// 		}
-						// 		channel = (*new_node).GetChannel()
-						// 		fmt.Println("Looking for node handler...")
-						// 		cnt++
-						// 	}
-						// 	jobId++
-						// 	newJob = jobId
-						// }
+						succ := false
+						cnt := 1
+						for !succ {
+							channel <- base.Message{
+								JobId:     newJob,
+								Key:       key,
+								Command:   constants.ALIVE_ACK,
+								Data:      value,
+								SrcID:     client_id,
+								Client_Ch: client.Client_ch}
+							succ = client.StartTimeout(newJob, constants.ALIVE_ACK, c.CLIENT_GET_TIMEOUT_MS)
+							if succ {
+								channel <- base.Message{
+									JobId:     newJob,
+									Key:       key,
+									Command:   constants.CLIENT_REQ_WRITE,
+									Data:      value,
+									SrcID:     client_id,
+									Client_Ch: client.Client_ch}
+								client.StartTimeout(newJob, constants.CLIENT_REQ_WRITE, c.CLIENT_GET_TIMEOUT_MS)
+							} else {
+								new_node := base.FindPrefList(token, phy_nodes, cnt)
+								if new_node == nil {
+									fmt.Println("System currently busy, try again later :D")
+									return
+								}
+								channel = (*new_node).GetChannel()
+								fmt.Println("Looking for node handler...")
+								cnt++
+							}
+							jobId++
+							newJob = jobId
+						}
 					} else if matched, _ := regexp.MatchString(getRegex, input); matched {
 						//get
 						key, client_id, err := base.ParseGetArg(getRegex, input)

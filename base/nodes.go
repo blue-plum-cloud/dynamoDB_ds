@@ -270,9 +270,11 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 	visitedNodes := make(map[int]struct{}) // To keep track of unique ph\ysical nodes. Use map as set. Use struct{} to occupy 0 space
 
 	// Coordinator copy
+	// If I uncomment these 3 lines, got race condition on non_replication_test O.O
 	// newObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: false}
 	// n.data[hashKey] = &newObj // do not handle coordinator die
 	// visitedNodes[initToken.phy_id] = struct{}{}
+
 	if c.DEBUG_LEVEL >= constants.INFO {
 		fmt.Printf("Put: Coordinator node = %d, token = %d, responsible for hashkey = %032X, replicationCount %d. Stored to self\n", n.GetID(), initToken.id, hashKey, replicationCount)
 	}
@@ -309,8 +311,11 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 	}
 
 	// For first batch replication, queue will be the same as iterList
-	queue.Add(pref_list[0], true)
-	iterList = append(iterList, pref_list[0])
+	if len(pref_list) > 0 {
+		queue.Add(pref_list[0], true)
+		iterList = append(iterList, pref_list[0])
+	}
+
 	for i := 1; i < len(pref_list); i++ { // skip coordinator
 		queue.Add(pref_list[i], false)
 		iterList = append(iterList, pref_list[i])
