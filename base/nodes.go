@@ -128,13 +128,13 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 
 			case constants.READ_DATA_ACK:
 				debugMsg.WriteString(fmt.Sprintf("numReads: %d", n.numReads))
+				n.numReads[msg.JobId]++
 				if n.numReads[msg.JobId] == c.R {
 					n.reconcile(n.data[msg.Key], msg.ObjData)
 					msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_READ, Key: msg.Key, Data: n.data[msg.Key].data, SrcID: n.GetID()}
 				} else {
 					n.reconcile(n.data[msg.Key], msg.ObjData)
 				}
-				n.numReads[msg.JobId]++
 
 			case constants.ACK_SET_DATA:
 				n.mutex.Lock()
