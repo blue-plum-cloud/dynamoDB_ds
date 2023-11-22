@@ -481,7 +481,7 @@ func (n *Node) Get(msg Message, c *config.Config) {
 	}
 
 	//consider trivial case where R = 1
-	//function just returns
+	//function just passes its data to the client and returns
 	if c.R == 1 {
 		msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_READ, Key: hashKey, Data: n.data[hashKey].data, SrcID: n.GetID()}
 		return
