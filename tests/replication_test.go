@@ -25,6 +25,8 @@ func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
 		{40, 40, 40},
 		{100, 100, 100},
 
+		{10, 10, 20},
+
 		{5, 10, 6},
 		{5, 12, 6},
 		{15, 10, 20},
@@ -91,8 +93,6 @@ func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
 		})
 	}
 }
-
-// TEST R2
 
 // TestSinglePutReplicationZeroNegative checks if replicas are
 // correctly created for a single put request for zero or
@@ -169,7 +169,7 @@ func TestSinglePutReplicationZeroNegative(t *testing.T) {
 	}
 }
 
-// TEST R3
+// TEST R2
 
 // TestMultipleUniquePutReplication tests if replications are properly handled
 // for multiple put requests
@@ -181,6 +181,15 @@ func TestMultipleUniquePutReplication(t *testing.T) {
 		{10, 20, 3, 8},
 		{100, 524, 10, 20},
 		{78, 78, 78, 100},
+
+		{5, 5, 1, 2},
+		{30, 30, 20, 20},
+
+		{10, 10, 20, 5},
+
+		{5, 10, 6, 4},
+		{5, 12, 6, 8},
+		{15, 10, 20, 15},
 	}
 	for _, tt := range tests {
 		keyValuePairs := generateRandomKeyValuePairs(80, 100, tt.numKeyValuePairs)
@@ -246,6 +255,8 @@ func TestMultipleUniquePutReplication(t *testing.T) {
 		})
 	}
 }
+
+// Test R3
 
 // TestMultipleOverwritePutReplication tests if replications are
 // properly handled with overwrites
