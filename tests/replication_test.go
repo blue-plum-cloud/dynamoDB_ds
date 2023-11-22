@@ -59,7 +59,7 @@ func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
 			select {
 			case ack := <-client_ch: // reply received in time
 				if ack.Key != key {
-					panic("wrong key!")
+					panic(fmt.Sprintf("wrong key! expected: %s got :%s", key, ack.Key))
 				}
 
 				fmt.Println("Value stored: ", value, " with key: ", key)
@@ -134,7 +134,7 @@ func TestSinglePutReplicationZeroNegative(t *testing.T) {
 			select {
 			case ack := <-client_ch: // reply received in time
 				if ack.Key != key {
-					panic("wrong key!")
+					panic(fmt.Sprintf("wrong key! expected: %s got :%s", key, ack.Key))
 				}
 
 				fmt.Println("Value stored: ", value, " with key: ", key)
