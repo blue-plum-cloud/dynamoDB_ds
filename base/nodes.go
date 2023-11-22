@@ -276,10 +276,6 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 	if c.DEBUG_LEVEL >= constants.INFO {
 		fmt.Printf("Put: Coordinator node = %d, token = %d, responsible for hashkey = %032X, replicationCount %d. Stored to self\n", n.GetID(), initToken.id, hashKey, replicationCount)
 	}
-	if replicationCount <= 1 {
-		ackSent = true
-		msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_WRITE, Key: msg.Key, Data: msg.Data, SrcID: n.GetID(), ObjData: msg.ObjData}
-	}
 
 	// Retrieve preference list and start replication
 	pref_list, ok := n.prefList[initToken]
