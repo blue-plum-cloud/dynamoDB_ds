@@ -41,7 +41,7 @@ func TestValidQuorumWrite(t *testing.T) {
 			key := "Sudipta"
 			value := "Best Prof"
 
-			node := base.FindNode(key, phy_nodes, &c)
+			_, node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
 			channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, Client_Ch: client_ch}
 
@@ -95,7 +95,7 @@ func TestHighQuorumWrite(t *testing.T) {
 			key := "Sudipta"
 			value := "Best Prof"
 
-			node := base.FindNode(key, phy_nodes, &c)
+			_, node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
 			channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, Client_Ch: client_ch}
 
@@ -147,7 +147,7 @@ func TestQuorumWriteWithReasonableFailures(t *testing.T) {
 			key := generateRandomString(10)
 			value := generateRandomString(10)
 
-			node := base.FindNode(key, phy_nodes, &c)
+			_, node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
 
 			// Kill required num of nodes but not the one we are sending write to
@@ -217,7 +217,7 @@ func TestQuorumWriteWithHighFailures(t *testing.T) {
 			key := generateRandomString(10)
 			value := generateRandomString(10)
 
-			node := base.FindNode(key, phy_nodes, &c)
+			_, node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
 
 			// Kill required num of nodes but not the one we are sending write to
@@ -290,7 +290,7 @@ func TestValidQuorumRead(t *testing.T) {
 			key := generateRandomString(10)
 			value := generateRandomString(10)
 
-			node := base.FindNode(key, phy_nodes, &c)
+			_, node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
 
 			// Write
@@ -361,7 +361,7 @@ func TestHighQuorumRead(t *testing.T) {
 			key := generateRandomString(10)
 			value := generateRandomString(10)
 
-			node := base.FindNode(key, phy_nodes, &c)
+			_, node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
 
 			// Write
