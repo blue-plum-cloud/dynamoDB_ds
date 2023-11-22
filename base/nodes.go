@@ -127,8 +127,8 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 				n.channels[msg.SrcID] <- Message{JobId: msg.JobId, Command: constants.READ_DATA_ACK, Key: msg.Key, SrcID: n.GetID(), ObjData: obj, Client_Ch: msg.Client_Ch}
 
 			case constants.READ_DATA_ACK:
-				debugMsg.WriteString(fmt.Sprintf("numReads: %d", n.numReads))
 				n.numReads[msg.JobId]++
+				debugMsg.WriteString(fmt.Sprintf("numReads: %d", n.numReads))
 				if n.numReads[msg.JobId] == c.R {
 					n.reconcile(n.data[msg.Key], msg.ObjData)
 					msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_READ, Key: msg.Key, Data: n.data[msg.Key].data, SrcID: n.GetID()}
