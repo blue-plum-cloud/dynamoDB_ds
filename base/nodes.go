@@ -480,6 +480,13 @@ func (n *Node) Get(msg Message, c *config.Config) {
 		return
 	}
 
+	//consider trivial case where R = 1
+	//function just returns
+	if c.R == 1 {
+		msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_READ, Key: hashKey, Data: n.data[hashKey].data, SrcID: n.GetID()}
+		return
+	}
+
 	n.numReads[msg.JobId] = 1
 	//set up timer for the particular jobId here
 
