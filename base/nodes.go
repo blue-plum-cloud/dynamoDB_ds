@@ -183,8 +183,12 @@ func getWCount(c *config.Config) int {
 		wCount = c.W
 	}
 
-	if c.W > c.NUM_NODES {
+	if wCount > c.NUM_NODES {
 		wCount = c.NUM_NODES
+	}
+
+	if wCount > c.N {
+		wCount = c.N
 	}
 	return wCount
 }
