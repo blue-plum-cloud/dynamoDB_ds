@@ -42,4 +42,28 @@ R3. Ensure that updated put requests are replicated correctly
 - Check if all key-value pairs have correct number of replications
 
 ## Sloppy quorum tests
+Q1. Ensure that sloppy quorum writes are successful with no nodes down
+- W = 1
+- W < N
+- W == N
+
+Q2. Ensure that system can still handle invalid W values (will calculate W limit and use limit)
+- W > N
+
+Q3. Ensure that sloppy quorum writes successful with f failures
+- W < N-f
+- W == N-f
+
+Q4. Check that sloppy quorum fails with too many failures
+- W > N-f
+
+Q5. Ensure that sloppy quorum reads are successful
+- R = 1
+- R < N
+- R == N
+
+Q6. Ensure that invalid sloppy quorum read values do not result in successful read
+- R > N
+
 ## Hinted handoff tests
+## Client Tests
