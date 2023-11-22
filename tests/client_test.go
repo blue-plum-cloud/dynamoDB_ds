@@ -57,7 +57,7 @@ func TestSingleClientGet(t *testing.T) {
 
 	client := clients[0]
 
-	node := base.FindNode(key, phy_nodes, &c)
+	_, node := base.FindNode(key, phy_nodes, &c)
 	channel := (*node).GetChannel()
 
 	channel <- base.Message{
@@ -127,7 +127,7 @@ func TestMultipleClientMultiplePutSingleGet(t *testing.T) {
 			if i == 1 {
 				get_key = key
 			}
-			node := base.FindNode(key, phy_nodes, &c)
+			_, node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
 
 			channel <- base.Message{
@@ -145,7 +145,7 @@ func TestMultipleClientMultiplePutSingleGet(t *testing.T) {
 		time.Sleep(time.Millisecond)
 
 		client := clients[0]
-		node := base.FindNode(get_key, phy_nodes, &c)
+		_, node := base.FindNode(get_key, phy_nodes, &c)
 		channel := (*node).GetChannel()
 		channel <- base.Message{
 			JobId:     1,
@@ -205,7 +205,7 @@ func TestMultipleClientMultiplePutMultipleGet(t *testing.T) {
 			value := keyValuePairs[key]
 			client := clients[i]
 			fmt.Println("Client ", client.Id, "putting key ", key, " val: ", value)
-			node := base.FindNode(key, phy_nodes, &c)
+			_, node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
 
 			channel <- base.Message{
@@ -226,7 +226,7 @@ func TestMultipleClientMultiplePutMultipleGet(t *testing.T) {
 		for i, key := range keys {
 			client := clients[i]
 			fmt.Println("Client ", client.Id, "getting key ", key, " val: ", keyValuePairs[key])
-			node := base.FindNode(key, phy_nodes, &c)
+			_, node := base.FindNode(key, phy_nodes, &c)
 			channel := (*node).GetChannel()
 			channel <- base.Message{
 				JobId:     jobId,

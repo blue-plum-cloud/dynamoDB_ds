@@ -285,11 +285,13 @@ func (bst *BST) PrintBST() {
 
 type Queue struct {
 	Data []*TreeNode
+	Rep  []bool
 	Lock sync.Mutex
 }
 
-func (q *Queue) Add(val *TreeNode) {
+func (q *Queue) Add(val *TreeNode, rep bool) {
 	q.Data = append(q.Data, val)
+	q.Rep = append(q.Rep, rep)
 }
 
 func (q *Queue) Empty() bool {
