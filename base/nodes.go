@@ -247,7 +247,7 @@ func FindPrefList(token *Token, phy_nodes []*Node, cnt int) *Node {
 	root := phy_nodes[ctc]
 	pref := root.prefList[token]
 	// Assuming at least one node in the preference list alive
-	if cnt > len(pref) {
+	if cnt >= len(pref) {
 		return nil
 	}
 	return phy_nodes[pref[cnt].Token.phy_id]
