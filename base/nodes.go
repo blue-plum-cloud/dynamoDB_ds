@@ -130,7 +130,8 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 			case constants.READ_DATA_ACK:
 				n.numReads[msg.JobId]++
 				debugMsg.WriteString(fmt.Sprintf("numReads: %d", n.numReads))
-				if n.numReads[msg.JobId] == c.R {
+				R := getRCount(c)
+				if n.numReads[msg.JobId] == R {
 					n.reconcile(n.data[msg.Key], msg.ObjData)
 					msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_READ, Key: msg.Key, Data: n.data[msg.Key].data, SrcID: n.GetID()}
 				} else {
@@ -156,7 +157,8 @@ func (n *Node) Start(wg *sync.WaitGroup, c *config.Config) {
 			}
 
 		case jobId := <-n.readTimeout:
-			if n.numReads[jobId] < c.R {
+			R := getRCount(c)
+			if n.numReads[jobId] < R {
 				fmt.Println("Quorum not fulfilled for get(), get() failed")
 				n.numReads[jobId] = -c.NUM_NODES //set to some negative number so it will not send
 			}
@@ -195,6 +197,22 @@ func getWCount(c *config.Config) int {
 		wCount = c.N
 	}
 	return wCount
+}
+
+func getRCount(c *config.Config) int {
+	rCount := 0
+	if c.R > 0 {
+		rCount = c.R
+	}
+
+	if rCount > c.NUM_NODES {
+		rCount = c.NUM_NODES
+	}
+
+	if rCount > c.N {
+		rCount = c.N
+	}
+	return rCount
 }
 
 /* Send message to update the node with object. Returns True if ACK receive within timeout, False otherwise */
@@ -476,13 +494,15 @@ func (n *Node) Get(msg Message, c *config.Config) {
 	n.increment_vclk()
 	hashKey := ComputeMD5(msg.Key)
 
+	R := getRCount(c)
+
 	if _, exists := n.data[hashKey]; !exists {
 		return
 	}
 
 	//consider trivial case where R = 1
 	//function just passes its data to the client and returns
-	if c.R == 1 {
+	if R == 1 {
 		msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_READ, Key: hashKey, Data: n.data[hashKey].data, SrcID: n.GetID()}
 		return
 	}
