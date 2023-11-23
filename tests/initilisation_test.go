@@ -81,8 +81,8 @@ func TestInitilisationTokenGTNodes(t *testing.T) {
 	}
 }
 
-// TestInitilisationInvalid tests if tokens are properly assigned if
-// there are less nodes than tokens.
+// TestInitilisationTokensLTNodes tests if tokens are properly assigned if
+// there are less tokens than nodes.
 // First i nodes should be used if there are i tokens
 func TestInitilisationTokensLTNodes(t *testing.T) {
 	var tests = []struct {

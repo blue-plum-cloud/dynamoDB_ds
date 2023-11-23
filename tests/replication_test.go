@@ -25,6 +25,8 @@ func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
 		{40, 40, 40},
 		{100, 100, 100},
 
+		{10, 10, 20},
+
 		{5, 10, 6},
 		{5, 12, 6},
 		{15, 10, 20},
@@ -57,7 +59,7 @@ func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
 			select {
 			case ack := <-client_ch: // reply received in time
 				if ack.Key != key {
-					panic("wrong key!")
+					panic(fmt.Sprintf("wrong key! expected: %s got :%s", key, ack.Key))
 				}
 
 				fmt.Println("Value stored: ", value, " with key: ", key)
@@ -92,11 +94,10 @@ func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
 	}
 }
 
-// TEST R2
+// Test R2
 
-// TestSinglePutReplicationZeroNegative checks if replicas are
-// correctly created for a single put request for zero or
-// negative N values
+// TestSinglePutReplicationZeroNegative checks that writes will
+// not be successful if n is zero or negative
 func TestSinglePutReplicationZeroNegative(t *testing.T) {
 	var tests = []struct {
 		numNodes, numTokens, nValue int
@@ -120,7 +121,7 @@ func TestSinglePutReplicationZeroNegative(t *testing.T) {
 			c.NUM_TOKENS = tt.numTokens
 			c.N = tt.nValue
 			c.W = expectedTotalReplications
-			c.CLIENT_PUT_TIMEOUT_MS = 5_000 // long timeout since we are testing replications not timeout
+			c.CLIENT_PUT_TIMEOUT_MS = 1_000
 
 			phy_nodes, close_ch, client_ch := setUpNodes(&c)
 
@@ -134,34 +135,13 @@ func TestSinglePutReplicationZeroNegative(t *testing.T) {
 			select {
 			case ack := <-client_ch: // reply received in time
 				if ack.Key != key {
-					panic("wrong key!")
+					panic(fmt.Sprintf("wrong key! expected: %s got :%s", key, ack.Key))
 				}
 
-				fmt.Println("Value stored: ", value, " with key: ", key)
-			case <-time.After(time.Duration(c.CLIENT_PUT_TIMEOUT_MS) * time.Millisecond): // timeout reached
-				fmt.Println("Put Timeout reached")
-				t.Error("Put timeout reached. Test failed.")
+				t.Error("Unexpected behaviour! Value stored when not supposed to")
 				return
-			}
-
-			ori := 0
-			repCnt := 0
-			hashedKey := base.ComputeMD5(key)
-			for _, n := range phy_nodes {
-				val, ok := n.GetAllData()[hashedKey]
-				if ok {
-					if val.GetData() == value && val.IsReplica() {
-						repCnt++
-					} else if val.GetData() == value && !val.IsReplica() {
-						ori++
-					}
-				}
-			}
-			if repCnt != expectedReplicas {
-				t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedReplicas)
-			}
-			if ori != 1 {
-				t.Errorf("Original data for key '%s' is missing", key)
+			case <-time.After(time.Duration(c.CLIENT_PUT_TIMEOUT_MS) * time.Millisecond): // timeout reached
+				fmt.Println("Expected behaviour: Put Timeout reached")
 			}
 
 			close(close_ch)
@@ -181,6 +161,15 @@ func TestMultipleUniquePutReplication(t *testing.T) {
 		{10, 20, 3, 8},
 		{100, 524, 10, 20},
 		{78, 78, 78, 100},
+
+		{5, 5, 1, 2},
+		{30, 30, 20, 20},
+
+		{10, 10, 20, 5},
+
+		{5, 10, 6, 4},
+		{5, 12, 6, 8},
+		{15, 10, 20, 15},
 	}
 	for _, tt := range tests {
 		keyValuePairs := generateRandomKeyValuePairs(80, 100, tt.numKeyValuePairs)
@@ -246,6 +235,8 @@ func TestMultipleUniquePutReplication(t *testing.T) {
 		})
 	}
 }
+
+// Test R4
 
 // TestMultipleOverwritePutReplication tests if replications are
 // properly handled with overwrites
