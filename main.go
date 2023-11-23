@@ -250,7 +250,7 @@ func main() {
 							Data:      value,
 							SrcID:     client_id,
 							Client_Ch: client.Client_ch}
-						client.StartTimeout(newJob, constants.CLIENT_REQ_WRITE, c.CLIENT_GET_TIMEOUT_MS)
+						client.StartTimeout(newJob, constants.CLIENT_REQ_WRITE, c.CLIENT_PUT_TIMEOUT_MS)
 					} else {
 						new_node := base.FindPrefList(token, phy_nodes, cnt)
 						if new_node == nil {
