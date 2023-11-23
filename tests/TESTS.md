@@ -26,15 +26,17 @@ R1. Ensure that a single put request is replicated correctly. W == Expected repl
 - N > Nodes, Tokens == Nodes
 - N > Nodes, Tokens > Nodes
 - N > Nodes, Tokens < Nodes
+  
+R2. Ensure that writes will not be successful if N is zero or negative
 - N < 0
 - N == 0 
 
-R2. Ensure that multiple unique put requests are replicated correctly
+R3. Ensure that multiple unique put requests are replicated correctly
 - Randomly generate key-value pairs
 - PUT all key-value pairs
 - Check if all key-value pairs have correct number of replications
 
-R3. Ensure that updated put requests are replicated correctly
+R4. Ensure that updated put requests are replicated correctly
 - Randomly generate key-value pairs
 - PUT all key-value pairs
 - Update value of key-value pairs

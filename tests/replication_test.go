@@ -94,9 +94,10 @@ func TestSinglePutReplicationNonZeroNonNegative(t *testing.T) {
 	}
 }
 
-// TestSinglePutReplicationZeroNegative checks if replicas are
-// correctly created for a single put request for zero or
-// negative N values
+// Test R2
+
+// TestSinglePutReplicationZeroNegative checks that writes will
+// not be successful if n is zero or negative
 func TestSinglePutReplicationZeroNegative(t *testing.T) {
 	var tests = []struct {
 		numNodes, numTokens, nValue int
@@ -120,7 +121,7 @@ func TestSinglePutReplicationZeroNegative(t *testing.T) {
 			c.NUM_TOKENS = tt.numTokens
 			c.N = tt.nValue
 			c.W = expectedTotalReplications
-			c.CLIENT_PUT_TIMEOUT_MS = 5_000 // long timeout since we are testing replications not timeout
+			c.CLIENT_PUT_TIMEOUT_MS = 1_000
 
 			phy_nodes, close_ch, client_ch := setUpNodes(&c)
 
@@ -137,31 +138,10 @@ func TestSinglePutReplicationZeroNegative(t *testing.T) {
 					panic(fmt.Sprintf("wrong key! expected: %s got :%s", key, ack.Key))
 				}
 
-				fmt.Println("Value stored: ", value, " with key: ", key)
-			case <-time.After(time.Duration(c.CLIENT_PUT_TIMEOUT_MS) * time.Millisecond): // timeout reached
-				fmt.Println("Put Timeout reached")
-				t.Error("Put timeout reached. Test failed.")
+				t.Error("Unexpected behaviour! Value stored when not supposed to")
 				return
-			}
-
-			ori := 0
-			repCnt := 0
-			hashedKey := base.ComputeMD5(key)
-			for _, n := range phy_nodes {
-				val, ok := n.GetAllData()[hashedKey]
-				if ok {
-					if val.GetData() == value && val.IsReplica() {
-						repCnt++
-					} else if val.GetData() == value && !val.IsReplica() {
-						ori++
-					}
-				}
-			}
-			if repCnt != expectedReplicas {
-				t.Errorf("Replication count for key '%s' is %d; expected %d", key, repCnt, expectedReplicas)
-			}
-			if ori != 1 {
-				t.Errorf("Original data for key '%s' is missing", key)
+			case <-time.After(time.Duration(c.CLIENT_PUT_TIMEOUT_MS) * time.Millisecond): // timeout reached
+				fmt.Println("Expected behaviour: Put Timeout reached")
 			}
 
 			close(close_ch)
@@ -169,7 +149,7 @@ func TestSinglePutReplicationZeroNegative(t *testing.T) {
 	}
 }
 
-// TEST R2
+// TEST R3
 
 // TestMultipleUniquePutReplication tests if replications are properly handled
 // for multiple put requests
@@ -256,7 +236,7 @@ func TestMultipleUniquePutReplication(t *testing.T) {
 	}
 }
 
-// Test R3
+// Test R4
 
 // TestMultipleOverwritePutReplication tests if replications are
 // properly handled with overwrites
