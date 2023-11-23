@@ -342,11 +342,13 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 
 	// In first batch replication, we do not do handOff
 	isHandOff := false
+
 	for {
 		if queue.Empty() {
 			break
 		}
 
+		handOffCnt := 0
 		failedTreeNodes := Queue{
 			Data: []*TreeNode{},
 			Rep:  []bool{},
@@ -368,11 +370,10 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 				if isHandOff {
 					handMsg.Command = constants.BACK_DATA
 					handMsg.HandoffToken = restoreToken.Token
-
 					fmt.Printf("Attempting to replicate to node %d from failing node %d\n", curToken.Token.phy_id, restoreToken.Token.phy_id)
-					go n.replicate(handMsg, curToken, c, &failedTreeNodes, waitRep)
+					go n.replicate(handMsg, curToken, c, &failedTreeNodes, waitRep, &handOffCnt)
 				} else {
-					go n.replicate(handMsg, curToken, c, &failedTreeNodes, waitRep)
+					go n.replicate(handMsg, curToken, c, &failedTreeNodes, waitRep, &handOffCnt)
 				}
 			}
 		}
@@ -382,14 +383,14 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 		// Update queue for next batch rep
 		// failedTreeNodes is to store the node that fails to replicate
 		if c.DEBUG_LEVEL >= constants.VERBOSE_FIXED {
-			fmt.Printf("Current replicated = %d\n", replicationCount-len(failedTreeNodes.Data))
+			fmt.Printf("Current replicated = %d\n", replicationCount-len(failedTreeNodes.Data)-handOffCnt)
 			for _, failedTreeNode := range failedTreeNodes.Data {
 				fmt.Printf("failed node=%d, token=%d\n", failedTreeNode.Token.phy_id, failedTreeNode.Token.phy_id)
 			}
 		}
 
 		// sloppy quorum after W rep sent ack to client
-		if replicationCount-len(failedTreeNodes.Data) >= W && !ackSent {
+		if replicationCount-len(failedTreeNodes.Data)-handOffCnt >= W && !ackSent {
 			ackSent = true
 			msg.Client_Ch <- Message{JobId: msg.JobId, Command: constants.CLIENT_ACK_WRITE, Key: msg.Key, Data: msg.Data, SrcID: n.id}
 		}
@@ -422,17 +423,21 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 	}
 }
 
-func (n *Node) replicate(msg Message, curToken *TreeNode, c *config.Config, failedTreeNodes *Queue, wg *sync.WaitGroup) {
+func (n *Node) replicate(msg Message, curToken *TreeNode, c *config.Config, failedTreeNodes *Queue, wg *sync.WaitGroup, handOffCnt *int) {
 	defer wg.Done()
 	updateSuccess := n.updateToken(curToken.Token, msg, c)
-
 	// if replication fails or handoff fails, add to queue for the next batch of replication
 	failedTreeNodes.Lock.Lock()
+	if msg.Command == constants.BACK_DATA && updateSuccess {
+		*handOffCnt += 1
+	}
 	if !updateSuccess {
 		failedTreeNodes.Data = append(failedTreeNodes.Data, curToken)
 		failedTreeNodes.Rep = append(failedTreeNodes.Rep, true)
 	}
+
 	failedTreeNodes.Lock.Unlock()
+
 }
 
 // helper func for GET
