@@ -195,10 +195,10 @@ func TestQuorumWriteWithHighFailures(t *testing.T) {
 	var tests = []struct {
 		numNodes, numTokens, nValue, wValue, numKill int
 	}{
-		{5, 5, 3, 3, 4},
-		{10, 10, 6, 6, 5},
+		{5, 5, 3, 3, 40},
+		{10, 10, 6, 6, 50000},
 
-		{5, 5, 3, 3, 3},
+		{5, 5, 3, 3, 300000},
 		{10, 15, 5, 5, 7},
 	}
 	for _, tt := range tests {
