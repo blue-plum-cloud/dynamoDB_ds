@@ -88,3 +88,7 @@ H2. Ensure hinted handoff works when coordinator node is down
 - N = min(Nodes,Tokens)
 
 ## Client Tests
+C1. Ensure single client can perform one put and one get
+
+C2. Ensure multiple clients can perform multiple puts and a single get after
+- 
