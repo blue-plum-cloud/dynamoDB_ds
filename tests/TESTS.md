@@ -8,6 +8,7 @@ The tests written can be categorised into the following:
 - Replication tests
 - Sloppy quorum tests
 - Hinted handoff tests
+- Multiple clients
 
 ## Initilisation tests
 I1. Ensure that tokens are allocated correctly to the nodes
@@ -68,4 +69,22 @@ Q6. Ensure that invalid sloppy quorum read values do not result in successful re
 - R > N
 
 ## Hinted handoff tests
+H1. Ensure hinted handoff works when one non-coordinator node is down
+- Tokens == Nodes
+- Tokens > Nodes
+- Tokens < Nodes
+
+- N = 1
+- N < min(Nodes,Tokens)
+- N = min(Nodes,Tokens)
+
+H2. Ensure hinted handoff works when coordinator node is down
+- Tokens == Nodes
+- Tokens > Nodes
+- Tokens < Nodes
+
+- N = 1
+- N < min(Nodes,Tokens)
+- N = min(Nodes,Tokens)
+
 ## Client Tests
