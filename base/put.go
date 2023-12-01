@@ -92,6 +92,9 @@ func (n *Node) replicate(repJob *ReplicationJob, c *config.Config, failedRepQueu
 */
 func (n *Node) Put(msg Message, value string, c *config.Config) {
 	replicationCount := GetReplicationCount(c)
+	if replicationCount <= 0 {
+		return
+	}
 
 	W := getWCount(c)
 	ackSent := false
@@ -116,10 +119,10 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 		return
 	}
 
-	visitedNodes := make(map[int]struct{}) // visited unique nodes. Use map as set, struct{} to occupy 0 space
-	var curTreeNode *TreeNode              // enforce traversal order despite concurrent replicate requests
-	var repJobs []*ReplicationJob          // replication jobs per batch iteration
-	for i := 0; i < c.N; i++ {             // populate first batch request
+	visitedNodes := make(map[int]struct{})  // visited unique nodes. Use map as set, struct{} to occupy 0 space
+	var curTreeNode *TreeNode               // enforce traversal order despite concurrent replicate requests
+	var repJobs []*ReplicationJob           // replication jobs per batch iteration
+	for i := 0; i < replicationCount; i++ { // populate first batch request
 		repObj := Object{data: value, context: &Context{v_clk: copy_vclk}, isReplica: true}
 		repMsg := Message{JobId: msg.JobId, Command: constants.SET_DATA, Key: hashKey, ObjData: &repObj, SrcID: n.GetID(), HandoffToken: pref_list[i].Token}
 		repJob := ReplicationJob{msg: repMsg, dst: pref_list[i]}
@@ -167,7 +170,7 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 			nxt := n.tokenStruct.getNext(curTreeNode)
 			if nxt.Token.GetID() == initToken.GetID() {
 				fmt.Printf("Put: ERROR! Only replicated %d/%d times!\n", replicationCount-len(failedRepQueue.Data), c.N)
-				break
+				return
 			}
 			if _, visited := visitedNodes[nxt.Token.phy_id]; !visited {
 				failedRepQueue.Data[cnt].dst = nxt
