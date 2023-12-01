@@ -283,20 +283,20 @@ func (bst *BST) PrintBST() {
 	}
 }
 
-type Queue struct {
-	Data []*TreeNode
-	Rep  []bool
+type ReplicationJob struct {
+	msg Message
+	dst *TreeNode
+}
+
+type ReplicationQueue struct {
+	Data []*ReplicationJob
 	Lock sync.Mutex
 }
 
-func (q *Queue) Add(val *TreeNode, rep bool) {
+func (q *ReplicationQueue) Add(val *ReplicationJob) {
 	q.Data = append(q.Data, val)
-	q.Rep = append(q.Rep, rep)
 }
 
-func (q *Queue) Empty() bool {
-	if len(q.Data) == 0 {
-		return true
-	}
-	return false
+func (q *ReplicationQueue) Empty() bool {
+	return len(q.Data) == 0
 }
