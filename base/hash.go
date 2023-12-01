@@ -72,6 +72,18 @@ func findCurrentToken(node *Node, cnt int) *TreeNode {
 	return cur
 }
 
+func getPrefCnt(c *config.Config) int {
+	prefCnt := 3
+	if c.NUM_NODES < prefCnt {
+		prefCnt = c.NUM_NODES
+	}
+	if c.N > prefCnt {
+		prefCnt = c.N
+	}
+	return prefCnt
+
+}
+
 func InitializeTokens(phy_nodes []*Node, c *config.Config) {
 	fmt.Println("Initializing tokens...")
 	maxValue := new(big.Int)
@@ -157,10 +169,12 @@ func InitializeTokens(phy_nodes []*Node, c *config.Config) {
 		rangeMap := make(map[*Token][]*TreeNode)
 		node := phy_nodes[0]
 		cnt := 0
+		prefCnt := getPrefCnt(c)
 		for cnt < c.NUM_TOKENS {
 			currentNode := findCurrentToken(node, cnt)
 			var pref []*TreeNode
-			pref = populatePreferenceList(node, currentNode, c.N)
+
+			pref = populatePreferenceList(node, currentNode, prefCnt)
 
 			// Update the range map for the current token
 			rangeMap[currentNode.Token] = make([]*TreeNode, len(pref))
