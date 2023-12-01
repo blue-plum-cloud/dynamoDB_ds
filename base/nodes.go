@@ -328,7 +328,7 @@ func (n *Node) Put(msg Message, value string, c *config.Config) {
 		iterList = append(iterList, pref_list[0])
 	}
 
-	for i := 1; i < len(pref_list); i++ { // skip coordinator
+	for i := 1; i < len(pref_list) && i < c.N; i++ { // skip coordinator
 		queue.Add(pref_list[i], false)
 		iterList = append(iterList, pref_list[i])
 	}
