@@ -97,10 +97,10 @@ func (client *Client) StartListening(c *config.Config) {
 				switch msg.Command {
 
 				case constants.CLIENT_ACK_READ:
+					client.NewestRead = msg.Data //for testing purposes
 					// TODO: validity check
 					fmt.Printf("COMPLETED Jobid=%d Command=%s: (%s, %s)\n",
 						msg.JobId, constants.GetConstantString(msg.Command), msg.Key, msg.Data)
-					client.NewestRead = msg.Data //for testing purposes
 					// fmt.Printf("set client newest read to %s\n", client.NewestRead)
 
 				case constants.CLIENT_ACK_WRITE:
