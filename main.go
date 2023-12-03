@@ -163,8 +163,9 @@ func generateClient(clients map[int]*base.Client, client_id int, close_ch chan s
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
-	fmt.Println("Starting the application...")
+	seed := time.Now().UnixNano()
+	rand.Seed(seed)
+	fmt.Printf("Starting the application with seed %d\n", seed)
 	reader := bufio.NewReader(os.Stdin)
 
 	c := config.InstantiateConfig()
@@ -213,6 +214,23 @@ func main() {
 				break
 			} else if input == "status" {
 				printStatus(phy_nodes)
+			} else if input == "wipe" { //restart system
+				close(close_ch) //take care of old goroutines
+
+				close_ch = make(chan struct{})
+				phy_nodes = base.CreateNodes(close_ch, &c)
+				base.InitializeTokens(phy_nodes, &c)
+				clients = make(map[int]*base.Client)
+
+				// running jobId
+				jobId = 0
+
+				//run nodes
+				for i := range phy_nodes {
+					wg.Add(1)
+					go phy_nodes[i].Start(&wg, &c)
+				}
+
 			} else if matched, _ := regexp.MatchString(putRegex, input); matched {
 				//put
 				key, value, client_id, err := base.ParsePutArg(putRegex, input)
