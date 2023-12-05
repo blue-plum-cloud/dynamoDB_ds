@@ -90,10 +90,10 @@ func BenchmarkSingleClientGet() {
 	// }
 
 	numClients := 1
-	numNodes := 120
-	numTokens := 10
+	numNodes := 20
+	numTokens := 30
 	nValue := 1
-	rAndWValue := 1
+	rAndWValue := 10
 
 	startTime := time.Now()
 
@@ -172,9 +172,9 @@ func BenchmarkSingleClientGet() {
 func BenchmarkMultipleClientMultiplePutMultipleGet() {
 
 	//adjust here for diff variables
-	numClients := 120
-	numNodes := 20
-	numTokens := 20
+	numClients := 300
+	numNodes := 30
+	numTokens := 60
 	nValue := 10
 	rAndWValue := 10
 
@@ -206,6 +206,7 @@ func BenchmarkMultipleClientMultiplePutMultipleGet() {
 	c.N = nValue
 	c.R = rAndWValue
 	c.W = rAndWValue
+	c.DEBUG_LEVEL = 1
 
 	c.CLIENT_GET_TIMEOUT_MS = 5_000
 	// c.DEBUG_LEVEL = 0
@@ -230,7 +231,7 @@ func BenchmarkMultipleClientMultiplePutMultipleGet() {
 	for i, key := range keys {
 		value := keyValuePairs[key]
 		client := clients[i]
-		fmt.Println("Client ", client.Id, "putting key ", key, " val: ", value)
+		// fmt.Println("Client ", client.Id, "putting key ", key, " val: ", value)
 		_, node := base.FindNode(key, phy_nodes, &c)
 		channel := (*node).GetChannel()
 
@@ -247,11 +248,11 @@ func BenchmarkMultipleClientMultiplePutMultipleGet() {
 	}
 
 	//NOTE: if this time.Sleep is excluded, data may not be fully replicated before the read
-	time.Sleep(time.Millisecond * time.Duration(numClients))
+	// time.Sleep(time.Millisecond * time.Duration(numClients))
 
 	for i, key := range keys {
 		client := clients[i]
-		fmt.Println("Client ", client.Id, "getting key ", key, " val: ", keyValuePairs[key])
+		// fmt.Println("Client ", client.Id, "getting key ", key, " val: ", keyValuePairs[key])
 		_, node := base.FindNode(key, phy_nodes, &c)
 		channel := (*node).GetChannel()
 		channel <- base.Message{
@@ -286,6 +287,6 @@ func BenchmarkMultipleClientMultiplePutMultipleGet() {
 
 func main() {
 
-	BenchmarkSingleClientGet()
-	// BenchmarkMultipleClientMultiplePutMultipleGet()
+	// BenchmarkSingleClientGet()
+	BenchmarkMultipleClientMultiplePutMultipleGet()
 }

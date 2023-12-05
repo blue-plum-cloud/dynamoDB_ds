@@ -68,14 +68,13 @@ func main() {
 	c.NUM_TOKENS = 10
 	c.N = 5
 	c.W = 3
-	c.CLIENT_PUT_TIMEOUT_MS = 1_000
+	c.CLIENT_PUT_TIMEOUT_MS = 100_000
 	c.DEBUG_LEVEL = 1
-	NUM_MSG := 100
+	NUM_MSG := 500
 
 	phy_nodes, close_ch, client_ch := setUpNodes(&c)
 	keyValuePairs := generateRandomKeyValuePairs(80, 100, NUM_MSG)
 
-	startTime := time.Now()
 	//here is a put function
 	for key, value := range keyValuePairs {
 		hashedKey := base.ComputeMD5(key)
@@ -95,6 +94,29 @@ Loop: // label to break out of
 			rcv_count++
 			if rcv_count == NUM_MSG {
 				break Loop // This breaks out of the for loop, not just the select
+			}
+		}
+	}
+	startTime := time.Now()
+	jobId := 0
+	for key, _ := range keyValuePairs {
+		// hashedKey := base.ComputeMD5(key)
+		// fmt.Printf("Key: %s ; Value: %s ; Hashed Key: %s", key, value, hashedKey)
+
+		_, node := base.FindNode(key, phy_nodes, &c)
+		channel := (*node).GetChannel()
+		channel <- base.Message{JobId: jobId, Key: key, Command: constants.CLIENT_REQ_READ, Client_Ch: client_ch} //pass write to system via client channel
+		jobId++
+	}
+
+	rcv_count = 0
+Loop2: // label to break out of
+	for {
+		select {
+		case <-client_ch: // receives replies from the system that it has succeeded the put/get
+			rcv_count++
+			if rcv_count >= NUM_MSG {
+				break Loop2 // This breaks out of the for loop, not just the select
 			}
 		}
 	}
