@@ -263,7 +263,7 @@ func CreateNodes(close_ch chan struct{}, c *config.Config) []*Node {
 			id:          j,
 			v_clk:       make([]int, numNodes),
 			channels:    make(map[int](chan Message)),
-			rcv_ch:      make(chan Message, numNodes),
+			rcv_ch:      make(chan Message, numNodes*100),
 			data:        make(map[string]*Object),
 			backup:      make(map[int](map[string]*Object)),
 			tokenStruct: BST{},
