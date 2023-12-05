@@ -61,7 +61,9 @@ func setUpNodes(c *config.Config) ([]*base.Node, chan struct{}, chan base.Messag
 }
 
 func main() {
+	//CURRENT EXPERIMENT ONLY DOES PUT WITH VARYING NUMBER OF MESSAGES
 	c := config.InstantiateConfig()
+	//ALL OF THIS CAN BE CHANGED
 	c.NUM_NODES = 10
 	c.NUM_TOKENS = 10
 	c.N = 5
@@ -74,13 +76,14 @@ func main() {
 	keyValuePairs := generateRandomKeyValuePairs(80, 100, NUM_MSG)
 
 	startTime := time.Now()
+	//here is a put function
 	for key, value := range keyValuePairs {
 		hashedKey := base.ComputeMD5(key)
 		fmt.Printf("Key: %s ; Value: %s ; Hashed Key: %s", key, value, hashedKey)
 
 		_, node := base.FindNode(key, phy_nodes, &c)
 		channel := (*node).GetChannel()
-		channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, Client_Ch: client_ch}
+		channel <- base.Message{Key: key, Command: constants.CLIENT_REQ_WRITE, Data: value, Client_Ch: client_ch} //pass write to system via client channel
 
 	}
 
@@ -88,7 +91,7 @@ func main() {
 Loop: // label to break out of
 	for {
 		select {
-		case <-client_ch: // reply received in time
+		case <-client_ch: // receives replies from the system that it has succeeded the put/get
 			rcv_count++
 			if rcv_count == NUM_MSG {
 				break Loop // This breaks out of the for loop, not just the select
