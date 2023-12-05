@@ -223,6 +223,11 @@ func TestMultipleClientMultiplePutMultipleGet(t *testing.T) {
 			keys := generateOrderedKeys(keyValuePairs)
 			c := config.InstantiateConfig()
 			c.DEBUG_LEVEL = 1
+			c.NUM_NODES = tt.numNodes
+			c.NUM_TOKENS = tt.numTokens
+			c.N = tt.nValue
+			c.R = tt.rAndWValue
+			c.W = tt.rAndWValue
 			jobId := 0
 
 			close_ch := make(chan struct{})
