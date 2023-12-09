@@ -65,7 +65,7 @@ Q5. Ensure that sloppy quorum reads are successful
 - R < N
 - R == N
 
-Q6. Ensure that invalid sloppy quorum read values do not result in successful read
+Q6. Ensure that system can still handle invalid R values (will calculate R limit and use limit)
 - R > N
 
 ## Hinted handoff tests
@@ -91,4 +91,3 @@ H2. Ensure hinted handoff works when coordinator node is down
 C1. Ensure single client can perform one put and one get
 
 C2. Ensure multiple clients can perform multiple puts and a single get after
-- 
