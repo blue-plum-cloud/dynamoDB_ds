@@ -138,7 +138,6 @@ func TestInitilisationZeroTokens(t *testing.T) {
 			c.NUM_TOKENS = tt.numTokens
 			phy_nodes, close_ch, _ := setUpNodes(&c)
 
-			// Check nodes < i get 1 token and nodes >= i get no tokens
 			for _, node := range phy_nodes {
 				numTokens := len(node.GetTokens())
 				expectedTokens := 0
@@ -170,13 +169,8 @@ func TestInitilisationZeroNodes(t *testing.T) {
 			c.NUM_TOKENS = tt.numTokens
 			phy_nodes, close_ch, _ := setUpNodes(&c)
 
-			// Check nodes < i get 1 token and nodes >= i get no tokens
-			for _, node := range phy_nodes {
-				numTokens := len(node.GetTokens())
-				expectedTokens := 0
-				if numTokens != expectedTokens {
-					t.Errorf("got: %d, expected %d tokens for node %d\n", numTokens, expectedTokens, node.GetID())
-				}
+			if len(phy_nodes) != 0 {
+				t.Errorf("got: %d, expected %d tokens for number of nodes\n", len(phy_nodes), 0)
 			}
 
 			close(close_ch)
@@ -230,7 +224,6 @@ func TestInitilisationNegativeTokens(t *testing.T) {
 			c.NUM_TOKENS = tt.numTokens
 			phy_nodes, close_ch, _ := setUpNodes(&c)
 
-			// Check nodes < i get 1 token and nodes >= i get no tokens
 			for _, node := range phy_nodes {
 				numTokens := len(node.GetTokens())
 				expectedTokens := 0
